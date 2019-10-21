@@ -30,9 +30,6 @@ EvoSelection.GetChildPath = function(parent, childNode)
 		array[array.length] = index;
 	}
 
-	if (!array.length)
-		return null;
-
 	return array.reverse();
 }
 
@@ -114,7 +111,7 @@ EvoSelection.Store = function(doc)
 
 	var selection = {}, sel = doc.getSelection();
 
-	selection["baseElem"] = EvoSelection.GetChildPath(doc.body, sel.baseNode);
+	selection["baseElem"] = sel.baseNode ? EvoSelection.GetChildPath(doc.body, sel.baseNode) : [];
 	selection["baseOffset"] = sel.baseOffset + EvoSelection.GetOverallTextOffset(sel.baseNode);
 
 	if (!sel.isCollapsed) {
@@ -224,15 +221,19 @@ EvoSelection.FromString = function(str)
 
 			array = str.substr(1, str.length - 2).split(",");
 
-			if (!array || !array.length) {
+			if (!array) {
 				return null;
 			}
 
-			for (ii = 0; ii < array.length; ii++) {
-				array[ii] = parseInt(array[ii], 10);
+			if (array.length == 1 && array[0] == "") {
+				array.length = 0;
+			} else {
+				for (ii = 0; ii < array.length; ii++) {
+					array[ii] = parseInt(array[ii], 10);
 
-				if (array[ii] == NaN) {
-					return null;
+					if (!Number.isInteger(array[ii])) {
+						return null;
+					}
 				}
 			}
 
@@ -262,7 +263,7 @@ EvoSelection.FromString = function(str)
 			var value;
 
 			value = parseInt(split_str[ii].slice(name.length + 1), 10);
-			if (value && value != NaN) {
+			if (Number.isInteger(value)) {
 				selection[name] = value;
 			}
 			continue;
@@ -279,7 +280,7 @@ EvoSelection.FromString = function(str)
 			var value;
 
 			value = parseInt(split_str[ii].slice(name.length + 1), 10);
-			if (value && value != NaN) {
+			if (Number.isInteger(value)) {
 				selection[name] = value;
 			}
 		}
