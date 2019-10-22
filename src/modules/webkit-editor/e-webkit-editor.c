@@ -80,7 +80,6 @@ struct _EWebKitEditorPrivate {
 	gint stamp; /* Changed only in the main thread, doesn't need locking */
 	guint web_extension_selection_changed_cb_id;
 	guint web_extension_content_changed_cb_id;
-	guint web_extension_undo_redo_state_changed_cb_id;
 	guint web_extension_user_changed_default_colors_cb_id;
 
 	gboolean html_mode;
@@ -472,27 +471,30 @@ web_extension_selection_changed_cb (GDBusConnection *connection,
 	g_object_thaw_notify (G_OBJECT (wk_editor));
 }
 
+
 static void
-web_extension_undo_redo_state_changed_cb (GDBusConnection *connection,
-                                          const gchar *sender_name,
-                                          const gchar *object_path,
-                                          const gchar *interface_name,
-                                          const gchar *signal_name,
-                                          GVariant *parameters,
-                                          EWebKitEditor *wk_editor)
+undu_redo_state_changed_cb (WebKitUserContentManager *manager,
+			    WebKitJavascriptResult *js_result,
+			    gpointer user_data)
 {
-	guint64 page_id = 0;
-	gboolean can_undo = FALSE, can_redo = FALSE;
+	EWebKitEditor *wk_editor = user_data;
+	JSCValue *jsc_value;
+	JSCValue *jsc_params;
+	gint32 state;
 
-	if (g_strcmp0 (signal_name, "UndoRedoStateChanged") != 0)
-		return;
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+	g_return_if_fail (js_result != NULL);
 
-	g_variant_get (parameters, "(tbb)", &page_id, &can_undo, &can_redo);
+	jsc_params = webkit_javascript_result_get_js_value (js_result);
+	g_return_if_fail (jsc_value_is_object (jsc_params));
 
-	if (page_id == webkit_web_view_get_page_id (WEBKIT_WEB_VIEW (wk_editor))) {
-		webkit_editor_set_can_undo (wk_editor, can_undo);
-		webkit_editor_set_can_redo (wk_editor, can_redo);
-	}
+	jsc_value = jsc_value_object_get_property (jsc_params, "state");
+	g_return_if_fail (jsc_value_is_number (jsc_value));
+	state = jsc_value_to_int32 (jsc_value);
+	g_clear_object (&jsc_value);
+
+	webkit_editor_set_can_undo (wk_editor, (state & E_UNDO_REDO_STATE_CAN_UNDO) != 0);
+	webkit_editor_set_can_redo (wk_editor, (state & E_UNDO_REDO_STATE_CAN_REDO) != 0);
 }
 
 static void
@@ -611,12 +613,6 @@ e_webkit_editor_set_web_extension_proxy (EWebKitEditor *wk_editor,
 			wk_editor->priv->web_extension_selection_changed_cb_id = 0;
 		}
 
-		if (wk_editor->priv->web_extension_undo_redo_state_changed_cb_id) {
-			if (connection)
-				g_dbus_connection_signal_unsubscribe (connection, wk_editor->priv->web_extension_undo_redo_state_changed_cb_id);
-			wk_editor->priv->web_extension_undo_redo_state_changed_cb_id = 0;
-		}
-
 		if (wk_editor->priv->web_extension_user_changed_default_colors_cb_id) {
 			if (connection)
 				g_dbus_connection_signal_unsubscribe (connection, wk_editor->priv->web_extension_user_changed_default_colors_cb_id);
@@ -652,19 +648,6 @@ e_webkit_editor_set_web_extension_proxy (EWebKitEditor *wk_editor,
 				NULL,
 				G_DBUS_SIGNAL_FLAGS_NONE,
 				(GDBusSignalCallback) web_extension_content_changed_cb,
-				wk_editor,
-				NULL);
-
-		wk_editor->priv->web_extension_undo_redo_state_changed_cb_id =
-			g_dbus_connection_signal_subscribe (
-				g_dbus_proxy_get_connection (wk_editor->priv->web_extension_proxy),
-				g_dbus_proxy_get_name (wk_editor->priv->web_extension_proxy),
-				E_WEBKIT_EDITOR_WEB_EXTENSION_INTERFACE,
-				"UndoRedoStateChanged",
-				E_WEBKIT_EDITOR_WEB_EXTENSION_OBJECT_PATH,
-				NULL,
-				G_DBUS_SIGNAL_FLAGS_NONE,
-				(GDBusSignalCallback) web_extension_undo_redo_state_changed_cb,
 				wk_editor,
 				NULL);
 
@@ -2070,9 +2053,12 @@ webkit_editor_undo (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
 
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (wk_editor, "DOMUndo");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoUndoRedo.Undo();");
 }
 
 static gboolean
@@ -2092,7 +2078,8 @@ webkit_editor_redo (EContentEditor *editor)
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (wk_editor, "DOMRedo");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoUndoRedo.Redo();");
 }
 
 static void
@@ -2596,18 +2583,12 @@ webkit_editor_clear_undo_redo_history (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
 
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		g_warning ("EHTMLEditorWebExtension not ready at %s!", G_STRFUNC);
-		return;
-	}
-
-	e_util_invoke_g_dbus_proxy_call_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMClearUndoRedoHistory",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		wk_editor->priv->cancellable);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoUndoRedo.Clear();");
 }
 
 static void
@@ -2862,10 +2843,12 @@ webkit_editor_selection_save (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
 
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "DOMSaveSelection");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.StoreSelection();");
 }
 
 static void
@@ -2873,10 +2856,12 @@ webkit_editor_selection_restore (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
 
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "DOMRestoreSelection");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.RestoreSelection();");
 }
 
 static void
@@ -3795,8 +3780,9 @@ webkit_editor_set_alignment (EWebKitEditor *wk_editor,
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	webkit_editor_set_format_int (
-		wk_editor, "DOMSelectionSetAlignment", (gint32) value);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.SetAlignment(%d);",
+		value);
 }
 
 static EContentEditorAlignment
@@ -3813,8 +3799,9 @@ webkit_editor_set_block_format (EWebKitEditor *wk_editor,
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	webkit_editor_set_format_int (
-		wk_editor, "DOMSelectionSetBlockFormat", (gint32) value);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.SetBlockFormat(%d);",
+		value);
 }
 
 static EContentEditorBlockFormat
@@ -5231,6 +5218,7 @@ webkit_editor_constructed (GObject *object)
 	WebKitWebContext *web_context;
 	WebKitSettings *web_settings;
 	WebKitWebView *web_view;
+	WebKitUserContentManager *manager;
 
 	wk_editor = E_WEBKIT_EDITOR (object);
 	web_view = WEBKIT_WEB_VIEW (wk_editor);
@@ -5243,6 +5231,13 @@ webkit_editor_constructed (GObject *object)
 		G_CALLBACK (e_webkit_editor_initialize_web_extensions_cb), wk_editor, 0);
 
 	G_OBJECT_CLASS (e_webkit_editor_parent_class)->constructed (object);
+
+	manager = webkit_web_view_get_user_content_manager (WEBKIT_WEB_VIEW (wk_editor));
+
+	g_signal_connect_object (manager, "script-message-received::undoRedoStateChanged",
+		G_CALLBACK (undu_redo_state_changed_cb), wk_editor, 0);
+
+	webkit_user_content_manager_register_script_message_handler (manager, "undoRedoStateChanged");
 
 	/* Give spell check languages to WebKit */
 	languages = e_spell_checker_list_active_languages (wk_editor->priv->spell_checker, NULL);
@@ -6647,7 +6642,6 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 
 	wk_editor->priv->web_extension_selection_changed_cb_id = 0;
 	wk_editor->priv->web_extension_content_changed_cb_id = 0;
-	wk_editor->priv->web_extension_undo_redo_state_changed_cb_id = 0;
 	wk_editor->priv->web_extension_user_changed_default_colors_cb_id = 0;
 }
 

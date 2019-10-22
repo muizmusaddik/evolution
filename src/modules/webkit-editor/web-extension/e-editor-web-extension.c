@@ -83,11 +83,6 @@ static const gchar *introspection_xml =
 "    <signal name='ContentChanged'>"
 "      <arg type='t' name='page_id' direction='out'/>"
 "    </signal>"
-"    <signal name='UndoRedoStateChanged'>"
-"      <arg type='t' name='page_id' direction='out'/>"
-"      <arg type='b' name='can_undo' direction='out'/>"
-"      <arg type='b' name='can_redo' direction='out'/>"
-"    </signal>"
 "    <signal name='UserChangedDefaultColors'>"
 "      <arg type='b' name='suppress_color_changes' direction='out'/>"
 "    </signal>"
@@ -436,18 +431,6 @@ static const gchar *introspection_xml =
 "    <method name='DOMRemoveEmbeddedStyleSheet'>"
 "      <arg type='t' name='page_id' direction='in'/>"
 "    </method>"
-"    <method name='DOMSaveSelection'>"
-"      <arg type='t' name='page_id' direction='in'/>"
-"    </method>"
-"    <method name='DOMRestoreSelection'>"
-"      <arg type='t' name='page_id' direction='in'/>"
-"    </method>"
-"    <method name='DOMUndo'>"
-"      <arg type='t' name='page_id' direction='in'/>"
-"    </method>"
-"    <method name='DOMRedo'>"
-"      <arg type='t' name='page_id' direction='in'/>"
-"    </method>"
 "    <method name='DOMQuoteAndInsertTextIntoSelection'>"
 "      <arg type='t' name='page_id' direction='in'/>"
 "      <arg type='s' name='text' direction='in'/>"
@@ -612,9 +595,6 @@ static const gchar *introspection_xml =
 "    <method name='DOMGetCaretOffset'>"
 "      <arg type='t' name='page_id' direction='in'/>"
 "      <arg type='u' name='offset' direction='out'/>"
-"    </method>"
-"    <method name='DOMClearUndoRedoHistory'>"
-"      <arg type='t' name='page_id' direction='in'/>"
 "    </method>"
 "  </interface>"
 "</node>";
@@ -1637,52 +1617,6 @@ handle_method_call (GDBusConnection *connection,
 
 		g_dbus_method_invocation_return_value (
 			invocation, g_variant_new ("(i)", value));
-	} else if (g_strcmp0 (method_name, "DOMSaveSelection") == 0) {
-		g_variant_get (parameters, "(t)", &page_id);
-
-		editor_page = get_editor_page_or_return_dbus_error (invocation, extension, page_id);
-		if (!editor_page)
-			goto error;
-
-		e_editor_dom_selection_save (editor_page);
-		g_dbus_method_invocation_return_value (invocation, NULL);
-	} else if (g_strcmp0 (method_name, "DOMRestoreSelection") == 0) {
-		g_variant_get (parameters, "(t)", &page_id);
-
-		editor_page = get_editor_page_or_return_dbus_error (invocation, extension, page_id);
-		if (!editor_page)
-			goto error;
-
-		e_editor_dom_selection_restore (editor_page);
-		g_dbus_method_invocation_return_value (invocation, NULL);
-	} else if (g_strcmp0 (method_name, "DOMUndo") == 0) {
-		EEditorUndoRedoManager *manager;
-
-		g_variant_get (parameters, "(t)", &page_id);
-
-		editor_page = get_editor_page_or_return_dbus_error (invocation, extension, page_id);
-		if (!editor_page)
-			goto error;
-
-		manager = e_editor_page_get_undo_redo_manager (editor_page);
-
-		e_editor_undo_redo_manager_undo (manager);
-
-		g_dbus_method_invocation_return_value (invocation, NULL);
-	} else if (g_strcmp0 (method_name, "DOMRedo") == 0) {
-		EEditorUndoRedoManager *manager;
-
-		g_variant_get (parameters, "(t)", &page_id);
-
-		editor_page = get_editor_page_or_return_dbus_error (invocation, extension, page_id);
-		if (!editor_page)
-			goto error;
-
-		manager = e_editor_page_get_undo_redo_manager (editor_page);
-
-		e_editor_undo_redo_manager_redo (manager);
-
-		g_dbus_method_invocation_return_value (invocation, NULL);
 	} else if (g_strcmp0 (method_name, "DOMTurnSpellCheckOff") == 0) {
 		g_variant_get (parameters, "(t)", &page_id);
 
@@ -2262,20 +2196,6 @@ handle_method_call (GDBusConnection *connection,
 		g_dbus_method_invocation_return_value (
 			invocation,
 			g_variant_new ("(u)", value));
-	} else if (g_strcmp0 (method_name, "DOMClearUndoRedoHistory") == 0) {
-		EEditorUndoRedoManager *manager;
-
-		g_variant_get (parameters, "(t)", &page_id);
-
-		editor_page = get_editor_page_or_return_dbus_error (invocation, extension, page_id);
-		if (!editor_page)
-			goto error;
-
-		manager = e_editor_page_get_undo_redo_manager (editor_page);
-		if (manager)
-			e_editor_undo_redo_manager_clean_history (manager);
-
-		g_dbus_method_invocation_return_value (invocation, NULL);
 	} else {
 		g_warning ("UNKNOWN METHOD '%s'", method_name);
 	}
@@ -2469,37 +2389,6 @@ web_page_send_request_cb (WebKitWebPage *web_page,
 }
 
 static void
-web_page_document_loaded_cb (WebKitWebPage *web_page,
-                             gpointer user_data)
-{
-	WebKitDOMDocument *document;
-	WebKitDOMRange *range = NULL;
-	WebKitDOMDOMWindow *dom_window;
-	WebKitDOMDOMSelection *dom_selection;
-
-	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
-
-	document = webkit_web_page_get_dom_document (web_page);
-	if (!document)
-		return;
-
-	dom_window = webkit_dom_document_get_default_view (document);
-	dom_selection = webkit_dom_dom_window_get_selection (dom_window);
-
-	/* Make sure there is a cursor located in the body after the document loads. */
-	if (!webkit_dom_dom_selection_get_anchor_node (dom_selection) &&
-	    !webkit_dom_dom_selection_get_focus_node (dom_selection)) {
-		range = webkit_dom_document_caret_range_from_point (document, 0, 0);
-		webkit_dom_dom_selection_remove_all_ranges (dom_selection);
-		webkit_dom_dom_selection_add_range (dom_selection, range);
-	}
-
-	g_clear_object (&range);
-	g_clear_object (&dom_selection);
-	g_clear_object (&dom_window);
-}
-
-static void
 web_page_notify_uri_cb (GObject *object,
 			GParamSpec *param,
 			gpointer user_data)
@@ -2572,35 +2461,6 @@ web_page_notify_uri_cb (GObject *object,
 }
 
 static void
-web_page_created_cb (WebKitWebExtension *wk_extension,
-                     WebKitWebPage *web_page,
-                     EEditorWebExtension *extension)
-{
-	EEditorPage *editor_page;
-
-	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
-	g_return_if_fail (E_IS_EDITOR_WEB_EXTENSION (extension));
-
-	editor_page = e_editor_page_new (web_page, extension);
-	extension->priv->pages = g_slist_prepend (extension->priv->pages, editor_page);
-
-	g_object_weak_ref (G_OBJECT (web_page), web_page_gone_cb, extension);
-
-	g_signal_connect (
-		web_page, "send-request",
-		G_CALLBACK (web_page_send_request_cb), extension);
-
-	g_signal_connect (
-		web_page, "document-loaded",
-		G_CALLBACK (web_page_document_loaded_cb), NULL);
-
-	g_signal_connect_object (
-		web_page, "notify::uri",
-		G_CALLBACK (web_page_notify_uri_cb),
-		extension, 0);
-}
-
-static void
 load_javascript_file (JSCContext *jsc_context,
 		      const gchar *js_filename)
 {
@@ -2665,6 +2525,46 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 	load_javascript_file (jsc_context, "e-editor.js");
 
 	g_clear_object (&jsc_context);
+}
+
+static void
+web_page_document_loaded_cb (WebKitWebPage *web_page,
+			     gpointer user_data)
+{
+	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
+
+	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), NULL);
+}
+
+static void
+web_page_created_cb (WebKitWebExtension *wk_extension,
+                     WebKitWebPage *web_page,
+                     EEditorWebExtension *extension)
+{
+	EEditorPage *editor_page;
+
+	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
+	g_return_if_fail (E_IS_EDITOR_WEB_EXTENSION (extension));
+
+	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), NULL);
+
+	editor_page = e_editor_page_new (web_page, extension);
+	extension->priv->pages = g_slist_prepend (extension->priv->pages, editor_page);
+
+	g_object_weak_ref (G_OBJECT (web_page), web_page_gone_cb, extension);
+
+	g_signal_connect (
+		web_page, "send-request",
+		G_CALLBACK (web_page_send_request_cb), extension);
+
+	g_signal_connect_object (
+		web_page, "notify::uri",
+		G_CALLBACK (web_page_notify_uri_cb),
+		extension, 0);
+
+	g_signal_connect (
+		web_page, "document-loaded",
+		G_CALLBACK (web_page_document_loaded_cb), NULL);
 }
 
 void

@@ -212,8 +212,6 @@ void		e_editor_page_emit_selection_changed
 						(EEditorPage *editor_page);
 void		e_editor_page_emit_content_changed
 						(EEditorPage *editor_page);
-void		e_editor_page_emit_undo_redo_state_changed
-						(EEditorPage *editor_page);
 void		e_editor_page_emit_user_changed_default_colors
 						(EEditorPage *editor_page,
 						 gboolean suppress_color_changes);

@@ -535,18 +535,20 @@ typedef enum {
 } EContentEditorFindFlags;
 
 /**
- * EClipboardFlags:
- * @E_CLIPBOARD_CAN_COPY: It's possible to copy the currently selected content.
+ * EUndoRedoState:
+ * @E_UNDO_REDO_STATE_NONE: Cannot undo, neither redo.
+ * @E_UNDO_REDO_STATE_CAN_UNDO: Undo is available.
+ * @E_UNDO_REDO_STATE_CAN_REDO: Redo is available.
  *
- * Specifies clipboard's current state.
+ * Flags in what state Undo/Redo stack is.
  *
- * Since: 3.24
+ * Since: 3.36
  **/
 typedef enum {
-	E_CLIPBOARD_CAN_COPY	= 1 << 0
-	/* E_CLIPBOARD_CAN_CUT	= 1 << 1,
-	E_CLIPBOARD_CAN_PASTE	= 1 << 2 */
-} EClipboardFlags;
+	E_UNDO_REDO_STATE_NONE		= 0,
+	E_UNDO_REDO_STATE_CAN_UNDO	= 1 << 0,
+	E_UNDO_REDO_STATE_CAN_REDO	= 1 << 1
+} EUndoRedoState;
 
 /**
  * EDnDTargetType:

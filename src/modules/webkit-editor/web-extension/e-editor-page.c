@@ -147,14 +147,6 @@ e_editor_page_setup (EEditorPage *editor_page,
 	editor_page->priv->web_extension = web_extension;
 	editor_page->priv->undo_redo_manager = e_editor_undo_redo_manager_new (editor_page);
 
-	g_signal_connect_swapped (
-		editor_page->priv->undo_redo_manager, "notify::can-undo",
-		G_CALLBACK (e_editor_page_emit_undo_redo_state_changed), editor_page);
-
-	g_signal_connect_swapped (
-		editor_page->priv->undo_redo_manager, "notify::can-redo",
-		G_CALLBACK (e_editor_page_emit_undo_redo_state_changed), editor_page);
-
 	web_editor = webkit_web_page_get_editor (web_page);
 
 	g_signal_connect_swapped (
@@ -974,39 +966,6 @@ e_editor_page_emit_content_changed (EEditorPage *editor_page)
 		E_WEBKIT_EDITOR_WEB_EXTENSION_INTERFACE,
 		"ContentChanged",
 		g_variant_new ("(t)", e_editor_page_get_page_id (editor_page)),
-		&error);
-
-	if (error) {
-		g_warning ("%s: Failed to emit signal: %s", G_STRFUNC, error->message);
-		g_error_free (error);
-	}
-}
-
-void
-e_editor_page_emit_undo_redo_state_changed (EEditorPage *editor_page)
-{
-	GDBusConnection *connection;
-	GError *error = NULL;
-
-	g_return_if_fail (E_IS_EDITOR_PAGE (editor_page));
-
-	if (!editor_page->priv->web_extension)
-		return;
-
-	connection = e_editor_web_extension_get_connection (editor_page->priv->web_extension);
-	if (!connection)
-		return;
-
-	g_dbus_connection_emit_signal (
-		connection,
-		NULL,
-		E_WEBKIT_EDITOR_WEB_EXTENSION_OBJECT_PATH,
-		E_WEBKIT_EDITOR_WEB_EXTENSION_INTERFACE,
-		"UndoRedoStateChanged",
-		g_variant_new ("(tbb)",
-			e_editor_page_get_page_id (editor_page),
-			e_editor_undo_redo_manager_can_undo (editor_page->priv->undo_redo_manager),
-			e_editor_undo_redo_manager_can_redo (editor_page->priv->undo_redo_manager)),
 		&error);
 
 	if (error) {

@@ -227,14 +227,18 @@ var EvoUndoRedo = {
 
 EvoUndoRedo.Attach = function()
 {
-	document.documentElement.onbeforeinput = EvoUndoRedo.before_input_cb;
-	document.documentElement.oninput = EvoUndoRedo.input_cb;
+	if (document.documentElement) {
+		document.documentElement.onbeforeinput = EvoUndoRedo.before_input_cb;
+		document.documentElement.oninput = EvoUndoRedo.input_cb;
+	}
 }
 
 EvoUndoRedo.Detach = function()
 {
-	document.documentElement.onbeforeinput = null;
-	document.documentElement.oninput = null;
+	if (document.documentElement) {
+		document.documentElement.onbeforeinput = null;
+		document.documentElement.oninput = null;
+	}
 }
 
 EvoUndoRedo.Enable = function()
