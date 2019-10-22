@@ -144,7 +144,7 @@ EvoSelection.Restore = function(doc, selection)
 	}
 
 	base_node = EvoSelection.GetTextOffsetNode(base_node, base_offset);
-	base_offset -= EvoSelection.GetOverallTextOffset(extent_node);
+	base_offset -= EvoSelection.GetOverallTextOffset(base_node);
 
 	extent_node = EvoSelection.FindElementByPath(doc.body, selection["extentElem"]);
 	extent_offset = selection["extentOffset"];
