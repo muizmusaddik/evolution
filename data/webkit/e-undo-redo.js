@@ -1,3 +1,20 @@
+/* -*- Mode: C; tab-width: 8; indent-tabs-mode: t; c-basic-offset: 8 -*- */
+/*
+ * Copyright (C) 2019 Red Hat (www.redhat.com)
+ *
+ * This library is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation.
+ *
+ * This library is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
+ * for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this library. If not, see <http://www.gnu.org/licenses/>.
+ */
+
 'use strict';
 
 /* semi-convention: private functions start with lower-case letter,
@@ -371,6 +388,10 @@ EvoUndoRedo.getCommonParent = function(firstNode, secondNode)
 
 	var commonParent, secondParent;
 
+	if (secondParent === document.body) {
+		return document.body;
+	}
+
 	for (commonParent = firstNode.parentElement; commonParent; commonParent = commonParent.parentElement) {
 		if (commonParent === document.body) {
 			break;
@@ -434,14 +455,16 @@ EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode)
 
 		/* Tweak what to save, because some events do not modify only selection, but also its parent elements */
 		if (kind == EvoUndoRedo.RECORD_KIND_EVENT) {
-			if (opType == "insertLineBreak" ||
+			if (opType == "" || // some WebKit-specific editing commands use this
+			    opType.startsWith("format") ||
+			    opType == "insertLineBreak" ||
 			    opType == "insertParagraph") {
 				while (startNode && !(startNode === document.body)) {
 					if (startNode.tagName == "P" ||
 					    startNode.tagName == "DIV" ||
 					    startNode.tagName == "BLOCKQUOTE" ||
-					    startNode.tagName == "U" ||
-					    startNode.tagName == "O" ||
+					    startNode.tagName == "UL" ||
+					    startNode.tagName == "OL" ||
 					    startNode.tagName == "PRE" ||
 					    startNode.tagName == "H1" ||
 					    startNode.tagName == "H2" ||

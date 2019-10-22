@@ -2600,10 +2600,79 @@ web_page_created_cb (WebKitWebExtension *wk_extension,
 		extension, 0);
 }
 
+static void
+load_javascript_file (JSCContext *jsc_context,
+		      const gchar *js_filename)
+{
+	JSCValue *result;
+	JSCException *exception;
+	gchar *content, *filename, *resource_uri;
+	gsize length = 0;
+	GError *error = NULL;
+
+	g_return_if_fail (jsc_context != NULL);
+
+	filename = g_build_filename (EVOLUTION_WEBKITDATADIR, js_filename, NULL);
+
+	if (!g_file_get_contents (filename, &content, &length, &error)) {
+		g_warning ("Failed to load '%s': %s", filename, error ? error->message : "Unknown error");
+
+		g_clear_error (&error);
+		g_free (filename);
+
+		return;
+	}
+
+	resource_uri = g_strconcat ("resource:///", js_filename, NULL);
+
+	result = jsc_context_evaluate_with_source_uri (jsc_context, content, length, resource_uri, 1);
+
+	g_free (resource_uri);
+
+	exception = jsc_context_get_exception (jsc_context);
+
+	if (exception) {
+		g_warning ("Failed to call script '%s': %d:%d: %s",
+			filename,
+			jsc_exception_get_line_number (exception),
+			jsc_exception_get_column_number (exception),
+			jsc_exception_get_message (exception));
+	}
+
+	g_clear_object (&result);
+	g_free (filename);
+	g_free (content);
+}
+
+static void
+window_object_cleared_cb (WebKitScriptWorld *world,
+			  WebKitWebPage *page,
+			  WebKitFrame *frame,
+			  gpointer user_data)
+{
+	JSCContext *jsc_context;
+
+	/* Load the javascript files only to the main frame, not to the subframes */
+	if (!webkit_frame_is_main_frame (frame))
+		return;
+
+	jsc_context = webkit_frame_get_js_context (frame);
+
+	/* Read in order as each other uses the previous */
+	load_javascript_file (jsc_context, "e-convert.js");
+	load_javascript_file (jsc_context, "e-selection.js");
+	load_javascript_file (jsc_context, "e-undo-redo.js");
+	load_javascript_file (jsc_context, "e-editor.js");
+
+	g_clear_object (&jsc_context);
+}
+
 void
 e_editor_web_extension_initialize (EEditorWebExtension *extension,
                                    WebKitWebExtension *wk_extension)
 {
+	WebKitScriptWorld *script_world;
+
 	g_return_if_fail (E_IS_EDITOR_WEB_EXTENSION (extension));
 
 	extension->priv->wk_extension = g_object_ref (wk_extension);
@@ -2624,6 +2693,11 @@ e_editor_web_extension_initialize (EEditorWebExtension *extension,
 	g_signal_connect (
 		wk_extension, "page-created",
 		G_CALLBACK (web_page_created_cb), extension);
+
+	script_world = webkit_script_world_get_default ();
+
+	g_signal_connect (script_world, "window-object-cleared",
+		G_CALLBACK (window_object_cleared_cb), NULL);
 }
 
 void

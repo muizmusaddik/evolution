@@ -43,7 +43,10 @@ set(sources
 	e-editor-web-extension-main.c
 	e-editor-web-extension-names.h
 )
-set(extra_defines)
+set(extra_defines
+	-DEVOLUTION_WEBKITDATADIR=\"${webkitdatadir}\"
+)
+
 set(extra_cflags)
 set(extra_incdirs)
 set(extra_ldflags)
