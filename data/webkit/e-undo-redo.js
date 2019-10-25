@@ -25,6 +25,11 @@ var EvoUndoRedo = {
 	E_UNDO_REDO_STATE_CAN_UNDO : 1 << 0,
 	E_UNDO_REDO_STATE_CAN_REDO : 1 << 1,
 
+	/* Flags for StartRecord() */
+	FLAG_NONE : 0,
+	FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
+	FLAG_SAVE_HTML : 1 << 1,
+
 	stack : {
 		// to not claim changes when none being made
 		state : -1,
@@ -37,9 +42,9 @@ var EvoUndoRedo = {
 			undoRecord = EvoUndoRedo.stack.getCurrentUndoRecord();
 			redoRecord = EvoUndoRedo.stack.getCurrentRedoRecord();
 			undoAvailable = undoRecord != null;
-			undoOpType = undoRecord ? undoRecord["opType"] : "";
+			undoOpType = undoRecord ? undoRecord.opType : "";
 			redoAvailable = redoRecord != null;
-			redoOpType = redoRecord ? redoRecord["opType"] : "";
+			redoOpType = redoRecord ? redoRecord.opType : "";
 
 			var state = EvoUndoRedo.E_UNDO_REDO_STATE_NONE;
 
@@ -60,9 +65,9 @@ var EvoUndoRedo = {
 
 				var params = {};
 
-				params["state"] = EvoUndoRedo.state;
-				params["undoOpType"] = EvoUndoRedo.undoOpType;
-				params["redoOpType"] = EvoUndoRedo.redoOpType;
+				params.state = EvoUndoRedo.state;
+				params.undoOpType = EvoUndoRedo.undoOpType;
+				params.redoOpType = EvoUndoRedo.redoOpType;
 
 				window.webkit.messageHandlers.undoRedoStateChanged.postMessage(params);
 			}
@@ -265,7 +270,32 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 		return;
 	}
 
-	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, inputEvent.inputType, null, null);
+	var opType = inputEvent.inputType, useParentBlockNode = false;
+
+	if (opType == "" || // some WebKit-specific editing commands use this
+	    opType.startsWith("format") ||
+	    opType == "insertLineBreak" ||
+	    opType == "insertParagraph") {
+		useParentBlockNode = true;
+		var startNode;
+
+		startNode = document.getSelection().baseNode;
+
+		if (!startNode) {
+			startNode = document.body;
+		}
+
+		while (startNode && !(startNode === document.body)) {
+			if (EvoEditor.IsBlockNode(startNode)) {
+				break;
+			}
+
+			startNode = startNode.parentElement;
+		}
+	}
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, startNode, null,
+		EvoUndoRedo.FLAG_SAVE_HTML | (useParentBlockNode ? EvoUndoRedo.FLAG_USE_PARENT_BLOCK_NODE : EvoUndoRedo.FLAG_NONE));
 }
 
 EvoUndoRedo.input_cb = function(inputEvent)
@@ -283,10 +313,12 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 		return;
 	}
 
-	if (record["kind"] == EvoUndoRedo.RECORD_KIND_GROUP) {
+	var kind = record.kind;
+
+	if (kind == EvoUndoRedo.RECORD_KIND_GROUP) {
 		var ii, records;
 
-		records = record["records"];
+		records = record.records;
 
 		if (records && records.length) {
 			if (isUndo) {
@@ -302,9 +334,9 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 
 		if (withSelection) {
 			if (isUndo) {
-				EvoSelection.Restore(document, record["selectionBefore"]);
+				EvoSelection.Restore(document, record.selectionBefore);
 			} else {
-				EvoSelection.Restore(document, record["selectionAfter"]);
+				EvoSelection.Restore(document, record.selectionAfter);
 			}
 		}
 
@@ -314,57 +346,67 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 	EvoUndoRedo.Disable();
 
 	try {
-		var commonParent, first, last, ii;
-
-		commonParent = EvoSelection.FindElementByPath(document.body, record["path"]);
-		if (!commonParent) {
-			throw "EvoUndoRedo::applyRecord: Cannot find parent at path " + record["path"];
-		}
-
-		first = record["firstChildIndex"];
-
-		// it can equal to the children.length, when the node had been removed
-		if (first < 0 || first > commonParent.children.length) {
-			throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
-		}
-
-		last = commonParent.children.length - record["restChildrenCount"];
-		if (last < 0 || last < first) {
-			throw "EvoUndoRedo::applyRecord: restChildrenCount (" + record["restChildrenCount"] + ") out of bounds (length:" +
-				commonParent.children.length + " first:" + first + " last:" + last + ")";
-		}
-
-		for (ii = last - 1; ii >= first; ii--) {
-			if (ii >= 0 && ii < commonParent.children.length) {
-				commonParent.removeChild(commonParent.children.item(ii));
+		if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
+			if (isUndo) {
+				document.documentElement.outerHTML = record.htmlBefore;
+			} else {
+				document.documentElement.outerHTML = record.htmlAfter;
 			}
-		}
-
-		var tmpNode = document.createElement("evo-tmp");
-
-		if (isUndo) {
-			tmpNode.innerHTML = record["htmlBefore"];
+		} else if (kind == EvoUndoRedo.RECORD_KIND_CUSTOM && record.apply != null) {
+			record.apply(record, isUndo);
 		} else {
-			tmpNode.innerHTML = record["htmlAfter"];
-		}
+			var commonParent, first, last, ii;
 
-		if (first + 1 < commonParent.children.length) {
-			first = commonParent.children.item(first + 1);
-
-			for (ii = tmpNode.children.length - 1; ii >= 0; ii--) {
-				commonParent.insertBefore(tmpNode.children.item(ii), first);
+			commonParent = EvoSelection.FindElementByPath(document.body, record.path);
+			if (!commonParent) {
+				throw "EvoUndoRedo::applyRecord: Cannot find parent at path " + record.path;
 			}
-		} else {
-			while(tmpNode.children.length) {
-				commonParent.appendChild(tmpNode.children.item(0));
+
+			first = record.firstChildIndex;
+
+			// it can equal to the children.length, when the node had been removed
+			if (first < 0 || first > commonParent.children.length) {
+				throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
+			}
+
+			last = commonParent.children.length - record.restChildrenCount;
+			if (last < 0 || last < first) {
+				throw "EvoUndoRedo::applyRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+					commonParent.children.length + " first:" + first + " last:" + last + ")";
+			}
+
+			for (ii = last - 1; ii >= first; ii--) {
+				if (ii >= 0 && ii < commonParent.children.length) {
+					commonParent.removeChild(commonParent.children.item(ii));
+				}
+			}
+
+			var tmpNode = document.createElement("evo-tmp");
+
+			if (isUndo) {
+				tmpNode.innerHTML = record.htmlBefore;
+			} else {
+				tmpNode.innerHTML = record.htmlAfter;
+			}
+
+			if (first + 1 < commonParent.children.length) {
+				first = commonParent.children.item(first + 1);
+
+				for (ii = tmpNode.children.length - 1; ii >= 0; ii--) {
+					commonParent.insertBefore(tmpNode.children.item(ii), first);
+				}
+			} else {
+				while(tmpNode.children.length) {
+					commonParent.appendChild(tmpNode.children.item(0));
+				}
 			}
 		}
 
 		if (withSelection) {
 			if (isUndo) {
-				EvoSelection.Restore(document, record["selectionBefore"]);
+				EvoSelection.Restore(document, record.selectionBefore);
 			} else {
-				EvoSelection.Restore(document, record["selectionAfter"]);
+				EvoSelection.Restore(document, record.selectionAfter);
 			}
 		}
 	} finally {
@@ -372,157 +414,38 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 	}
 }
 
-EvoUndoRedo.getCommonParent = function(firstNode, secondNode)
-{
-	if (!firstNode || !secondNode) {
-		return null;
-	}
-
-	if (firstNode.nodeType == firstNode.TEXT_NODE) {
-		firstNode = firstNode.parentElement;
-	}
-
-	if (secondNode.nodeType == secondNode.TEXT_NODE) {
-		secondNode = secondNode.parentElement;
-	}
-
-	if (!firstNode || !secondNode) {
-		return null;
-	}
-
-	var commonParent, secondParent;
-
-	if (secondParent === document.body) {
-		return document.body;
-	}
-
-	for (commonParent = firstNode.parentElement; commonParent; commonParent = commonParent.parentElement) {
-		if (commonParent === document.body) {
-			break;
-		}
-
-		for (secondParent = secondNode.parentElement; secondNode; secondNode = secondNode.parentElement) {
-			if (secondParent === document.body) {
-				break;
-			}
-
-			if (secondParent === commonParent) {
-				return commonParent;
-			}
-		}
-	}
-
-	return document.body;
-}
-
-EvoUndoRedo.getDirectChild = function(parent, child)
-{
-	if (!parent || !child || parent === child) {
-		return null;
-	}
-
-	while (child && !(child.parentElement === parent)) {
-		child = child.parentElement;
-	}
-
-	return child;
-}
-
-EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode)
+EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode, flags)
 {
 	if (EvoUndoRedo.disabled) {
-		return;
+		return null;
 	}
 
-	var record = {};
+	var record = {}, saveHTML;
 
-	record["kind"] = kind;
-	record["opType"] = opType;
-	record["selectionBefore"] = EvoSelection.Store(document);
+	saveHTML = (flags & EvoUndoRedo.FLAG_SAVE_HTML) != 0;
 
-	if (kind != EvoUndoRedo.RECORD_KIND_GROUP) {
-		var commonParent, startChild, endChild;
-		var firstChildIndex = -1, html = "", ii;
+	record.kind = kind;
+	record.opType = opType;
+	record.selectionBefore = EvoSelection.Store(document);
 
-		if (!startNode) {
-			startNode = document.getSelection().baseNode;
-			endNode = document.getSelection().extentNode;
+	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
+		record.htmlBefore = document.documentElement.outerHTML;
+	} else if (kind != EvoUndoRedo.RECORD_KIND_GROUP) {
+		var affected;
 
-			if (!startNode) {
-				startNode = document.body;
-			}
-		}
+		affected = EvoEditor.ClaimAffectedContent(startNode, endNode, (flags & EvoUndoRedo.FLAG_USE_PARENT_BLOCK_NODE) != 0, saveHTML);
 
-		if (!endNode) {
-			endNode = startNode;
-		}
+		record.path = affected.path;
+		record.firstChildIndex = affected.firstChildIndex;
+		record.restChildrenCount = affected.restChildrenCount;
 
-		/* Tweak what to save, because some events do not modify only selection, but also its parent elements */
-		if (kind == EvoUndoRedo.RECORD_KIND_EVENT) {
-			if (opType == "" || // some WebKit-specific editing commands use this
-			    opType.startsWith("format") ||
-			    opType == "insertLineBreak" ||
-			    opType == "insertParagraph") {
-				while (startNode && !(startNode === document.body)) {
-					if (startNode.tagName == "P" ||
-					    startNode.tagName == "DIV" ||
-					    startNode.tagName == "BLOCKQUOTE" ||
-					    startNode.tagName == "UL" ||
-					    startNode.tagName == "OL" ||
-					    startNode.tagName == "PRE" ||
-					    startNode.tagName == "H1" ||
-					    startNode.tagName == "H2" ||
-					    startNode.tagName == "H3" ||
-					    startNode.tagName == "H4" ||
-					    startNode.tagName == "H5" ||
-					    startNode.tagName == "H6" ||
-					    startNode.tagName == "ADDRESS" ||
-					    startNode.tagName == "TD" ||
-					    startNode.tagName == "TH") {
-						break;
-					}
-
-					startNode = startNode.parentElement;
-				}
-			}
-		}
-
-		commonParent = EvoUndoRedo.getCommonParent(startNode, endNode);
-		startChild = EvoUndoRedo.getDirectChild(commonParent, startNode);
-		endChild = EvoUndoRedo.getDirectChild(commonParent, endNode);
-
-		for (ii = 0 ; ii < commonParent.children.length; ii++) {
-			var child = commonParent.children.item(ii);
-
-			if (firstChildIndex == -1) {
-				/* The selection can be made both from the top to the bottom and
-				   from the bottom to the top, thus cover both cases. */
-				if (child === startChild) {
-					firstChildIndex = ii;
-				} else if (child === endChild) {
-					endChild = startChild;
-					startChild = child;
-					firstChildIndex = ii;
-				}
-			}
-
-			if (firstChildIndex != -1) {
-				html += child.outerHTML;
-
-				if (child === endChild) {
-					ii++;
-					break;
-				}
-			}
-		}
-
-		record["path"] = EvoSelection.GetChildPath(document.body, commonParent);
-		record["firstChildIndex"] = firstChildIndex;
-		record["restChildrenCount"] = commonParent.children.length - ii;
-		record["htmlBefore"] = html;
+		if (saveHTML)
+			record.htmlBefore = affected.html;
 	}
 
 	EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length] = record;
+
+	return record;
 }
 
 EvoUndoRedo.StopRecord = function(kind, opType)
@@ -537,37 +460,39 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 	var record = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
 
-	if (record["kind"] != kind) {
-		throw "EvoUndoRedo:StopRecord: Mismatch in record kind, expected " + record["kind"] + ", but received " + kind;
+	if (record.kind != kind) {
+		throw "EvoUndoRedo:StopRecord: Mismatch in record kind, expected " + record.kind + ", but received " + kind;
 	}
 
-	if (record["opType"] != opType) {
-		throw "EvoUndoRedo:StopRecord: Mismatch in record opType, expected '" + record["opType"] + "', but received '" + opType + "'";
+	if (record.opType != opType) {
+		throw "EvoUndoRedo:StopRecord: Mismatch in record opType, expected '" + record.opType + "', but received '" + opType + "'";
 	}
 
 	EvoUndoRedo.ongoingRecordings.length = EvoUndoRedo.ongoingRecordings.length - 1;
 
-	record["selectionAfter"] = EvoSelection.Store(document);
+	record.selectionAfter = EvoSelection.Store(document);
 
-	if (kind != EvoUndoRedo.RECORD_KIND_GROUP) {
+	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
+		record.htmlAfter = document.documentElement.outerHTML;
+	} else if (record.htmlBefore != window.undefined) {
 		var commonParent, first, last, ii, html = "";
 
-		commonParent = EvoSelection.FindElementByPath(document.body, record["path"]);
+		commonParent = EvoSelection.FindElementByPath(document.body, record.path);
 
 		if (!commonParent) {
 			throw "EvoUndoRedo.StopRecord:: Failed to stop '" + opType + "', cannot find common parent";
 		}
 
-		first = record["firstChildIndex"];
+		first = record.firstChildIndex;
 
 		// it can equal to the children.length, when the node had been removed
 		if (first < 0 || first > commonParent.children.length) {
 			throw "EvoUndoRedo::StopRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
 		}
 
-		last = commonParent.children.length - record["restChildrenCount"];
+		last = commonParent.children.length - record.restChildrenCount;
 		if (last < 0 || last < first) {
-			throw "EvoUndoRedo::StopRecord: restChildrenCount (" + record["restChildrenCount"] + ") out of bounds (length:" +
+			throw "EvoUndoRedo::StopRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
 				commonParent.children.length + " first:" + first + " last:" + last + ")";
 		}
 
@@ -577,17 +502,17 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 			}
 		}
 
-		record["htmlAfter"] = html;
+		record.htmlAfter = html;
 	}
 
 	if (EvoUndoRedo.ongoingRecordings.length) {
 		var parentRecord = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
-		var records = parentRecord["records"];
+		var records = parentRecord.records;
 		if (!records) {
 			records = [];
 		}
 		records[records.length] = record;
-		parentRecord["records"] = records;
+		parentRecord.records = records;
 	} else {
 		EvoUndoRedo.stack.push(record);
 	}

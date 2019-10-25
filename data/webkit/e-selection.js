@@ -128,12 +128,12 @@ EvoSelection.Store = function(doc)
 
 	var selection = {}, sel = doc.getSelection();
 
-	selection["baseElem"] = sel.baseNode ? EvoSelection.GetChildPath(doc.body, sel.baseNode) : [];
-	selection["baseOffset"] = sel.baseOffset + EvoSelection.GetOverallTextOffset(sel.baseNode);
+	selection.baseElem = sel.baseNode ? EvoSelection.GetChildPath(doc.body, sel.baseNode) : [];
+	selection.baseOffset = sel.baseOffset + EvoSelection.GetOverallTextOffset(sel.baseNode);
 
 	if (!sel.isCollapsed) {
-		selection["extentElem"] = EvoSelection.GetChildPath(doc.body, sel.extentNode);
-		selection["extentOffset"] = sel.extentOffset + EvoSelection.GetOverallTextOffset(sel.extentNode);
+		selection.extentElem = EvoSelection.GetChildPath(doc.body, sel.extentNode);
+		selection.extentOffset = sel.extentOffset + EvoSelection.GetOverallTextOffset(sel.extentNode);
 	}
 
 	return selection;
@@ -149,8 +149,8 @@ EvoSelection.Restore = function(doc, selection)
 
 	var base_node, base_offset, extent_node, extent_offset;
 
-	base_node = EvoSelection.FindElementByPath(doc.body, selection["baseElem"]);
-	base_offset = selection["baseOffset"];
+	base_node = EvoSelection.FindElementByPath(doc.body, selection.baseElem);
+	base_offset = selection.baseOffset;
 
 	if (!base_node) {
 		return;
@@ -163,8 +163,8 @@ EvoSelection.Restore = function(doc, selection)
 	base_node = EvoSelection.GetTextOffsetNode(base_node, base_offset);
 	base_offset -= EvoSelection.GetOverallTextOffset(base_node);
 
-	extent_node = EvoSelection.FindElementByPath(doc.body, selection["extentElem"]);
-	extent_offset = selection["extentOffset"];
+	extent_node = EvoSelection.FindElementByPath(doc.body, selection.extentElem);
+	extent_offset = selection.extentOffset;
 
 	if (extent_node) {
 		extent_node = EvoSelection.GetTextOffsetNode(extent_node, extent_offset);
@@ -205,10 +205,10 @@ EvoSelection.ToString = function(selection)
 
 	var str = "", base_elem, base_offset, extent_elem, extent_offset;
 
-	base_elem = selection["baseElem"];
-	base_offset = selection["baseOffset"];
-	extent_elem = selection["extentElem"];
-	extent_offset = selection["extentOffset"];
+	base_elem = selection.baseElem;
+	base_offset = selection.baseOffset;
+	extent_elem = selection.extentElem;
+	extent_offset = selection.extentOffset;
 
 	str += "baseElem=" + utils.arrayToString(base_elem);
 	str += " baseOffset=" + (base_offset ? base_offset : 0);
@@ -304,7 +304,7 @@ EvoSelection.FromString = function(str)
 	}
 
 	/* The "baseElem" is required, the rest is optional */
-	if (!selection["baseElem"])
+	if (!selection.baseElem)
 		return null;
 
 	return selection;
