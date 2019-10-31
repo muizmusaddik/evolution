@@ -185,6 +185,106 @@ var EvoUndoRedo = {
 			EvoUndoRedo.stack.maybeStateChanged();
 
 			return record;
+		},
+
+		pathMatches : function(path1, path2) {
+			if (!path1)
+				return !path2;
+			else if (!path2 || path1.length != path2.length)
+				return false;
+
+			var ii;
+
+			for (ii = 0; ii < path1.length; ii++) {
+				if (path1[ii] != path2[ii])
+					return false;
+			}
+
+			return true;
+		},
+
+		topInsertTextAtSamePlace : function() {
+			if (EvoUndoRedo.stack.current != EvoUndoRedo.stack.top ||
+			    EvoUndoRedo.stack.current == EvoUndoRedo.stack.bottom) {
+				return false;
+			}
+
+			var curr, prev;
+
+			curr = EvoUndoRedo.stack.array[EvoUndoRedo.stack.current];
+			prev = EvoUndoRedo.stack.array[EvoUndoRedo.stack.clampIndex(EvoUndoRedo.stack.current - 1)];
+
+			return curr && prev &&
+				curr.kind == EvoUndoRedo.RECORD_KIND_EVENT &&
+				curr.opType == "insertText" &&
+				!curr.selectionBefore.extentElem &&
+				prev.kind == EvoUndoRedo.RECORD_KIND_EVENT &&
+				prev.opType == "insertText" &&
+				!prev.selectionBefore.extentElem &&
+				curr.firstChildIndex == prev.firstChildIndex &&
+				curr.restChildrenCount == prev.restChildrenCount &&
+				curr.selectionBefore.baseOffset == prev.selectionAfter.baseOffset &&
+				EvoUndoRedo.stack.pathMatches(curr.path, prev.path) &&
+				EvoUndoRedo.stack.pathMatches(curr.selectionBefore.baseElem, prev.selectionAfter.baseElem);
+		},
+
+		maybeMergeInsertText : function(skipFirst) {
+			if (EvoUndoRedo.stack.current != EvoUndoRedo.stack.top ||
+			    EvoUndoRedo.stack.current == EvoUndoRedo.stack.bottom) {
+				return;
+			}
+
+			var ii, from, curr, keep = null;
+
+			from = EvoUndoRedo.stack.current;
+			curr = EvoUndoRedo.stack.array[from];
+
+			if (skipFirst) {
+				keep = curr;
+				from = EvoUndoRedo.stack.clampIndex(from - 1);
+				curr = EvoUndoRedo.stack.array[from];
+			}
+
+			if (!curr ||
+			    curr.kind != EvoUndoRedo.RECORD_KIND_EVENT ||
+			    curr.opType != "insertText" ||
+			    curr.selectionBefore.extentElem) {
+				return;
+			}
+
+			for (ii = EvoUndoRedo.stack.clampIndex(from - 1);
+			     ii != EvoUndoRedo.stack.bottom;
+			     ii = EvoUndoRedo.stack.clampIndex(ii - 1)) {
+				var prev;
+
+				prev = EvoUndoRedo.stack.array[ii];
+
+				if (prev.kind != EvoUndoRedo.RECORD_KIND_EVENT ||
+				    prev.opType != "insertText" ||
+				    prev.selectionBefore.extentElem ||
+				    curr.firstChildIndex != prev.firstChildIndex ||
+				    curr.restChildrenCount != prev.restChildrenCount ||
+				    curr.selectionBefore.baseOffset != prev.selectionAfter.baseOffset ||
+				    !EvoUndoRedo.stack.pathMatches(curr.path, prev.path) ||
+				    !EvoUndoRedo.stack.pathMatches(curr.selectionBefore.baseElem, prev.selectionAfter.baseElem)) {
+					break;
+				}
+
+				prev.opType = "insertText::merged";
+				prev.selectionAfter = curr.selectionAfter;
+				prev.htmlAfter = curr.htmlAfter;
+
+				curr = prev;
+				EvoUndoRedo.stack.array[EvoUndoRedo.stack.clampIndex(ii + 1)] = keep;
+				if (keep) {
+					EvoUndoRedo.stack.array[EvoUndoRedo.stack.clampIndex(ii + 2)] = null;
+				}
+
+				EvoUndoRedo.stack.top = ii + (keep ? 1 : 0);
+				EvoUndoRedo.stack.current = EvoUndoRedo.stack.top;
+			}
+
+			EvoUndoRedo.stack.maybeStateChanged();
 		}
 	},
 
@@ -259,6 +359,13 @@ EvoUndoRedo.Disable = function()
 	}
 }
 
+EvoUndoRedo.isWordDelimEvent = function(inputEvent)
+{
+	return inputEvent.inputType == "insertText" &&
+		inputEvent.data.length == 1 &&
+		(inputEvent.data == " " || inputEvent.data == "\t");
+}
+
 EvoUndoRedo.before_input_cb = function(inputEvent)
 {
 	if (EvoUndoRedo.disabled) {
@@ -266,6 +373,9 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 	}
 
 	var opType = inputEvent.inputType;
+
+	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
+		opType += "::WordDelim";
 
 	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null,
 		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
@@ -277,7 +387,17 @@ EvoUndoRedo.input_cb = function(inputEvent)
 		return;
 	}
 
-	EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, inputEvent.inputType);
+	var opType = inputEvent.inputType;
+
+	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
+		opType += "::WordDelim";
+
+	EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType);
+
+	if (!EvoUndoRedo.ongoingRecordings.length && opType == "insertText" &&
+	    !EvoUndoRedo.stack.topInsertTextAtSamePlace()) {
+		EvoUndoRedo.stack.maybeMergeInsertText(true);
+	}
 }
 
 EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
@@ -479,13 +599,19 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	if (EvoUndoRedo.ongoingRecordings.length) {
 		var parentRecord = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
 		var records = parentRecord.records;
+
 		if (!records) {
 			records = [];
 		}
+
 		records[records.length] = record;
 		parentRecord.records = records;
 	} else {
 		EvoUndoRedo.stack.push(record);
+
+		if (record.kind != EvoUndoRedo.RECORD_KIND_EVENT || record.opType != "insertText") {
+			EvoUndoRedo.stack.maybeMergeInsertText(true);
+		}
 	}
 }
 
