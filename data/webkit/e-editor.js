@@ -42,6 +42,11 @@ var EvoEditor = {
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN : 12,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA : 13,
 
+	/* Flags for ClaimAffectedContent() */
+	CLAIM_CONTENT_FLAG_NONE : 0,
+	CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
+	CLAIM_CONTENT_FLAG_SAVE_HTML : 1 << 1,
+
 	htmlFormat : false,
 	storedSelection : null
 };
@@ -179,10 +184,11 @@ EvoEditor.GetDirectChild = function(parent, child)
 	return child;
 }
 
-EvoEditor.ClaimAffectedContent = function(startNode, endNode, useParentBlockNode, withHtml)
+EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 {
 	var commonParent, startChild, endChild;
 	var firstChildIndex = -1, html = "", ii;
+	var withHtml = (flags & EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML) != 0;
 
 	if (!startNode) {
 		startNode = document.getSelection().baseNode;
@@ -197,7 +203,7 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, useParentBlockNode
 		endNode = startNode;
 	}
 
-	if (useParentBlockNode) {
+	if ((flags & EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE) != 0) {
 		while (startNode && !(startNode === document.body)) {
 			if (EvoEditor.IsBlockNode(startNode)) {
 				break;
@@ -339,7 +345,7 @@ EvoEditor.SetAlignment = function(alignment)
 		}
 	};
 
-	var affected = EvoEditor.ClaimAffectedContent(null, null, true, false);
+	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
 	if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE)
 		traversar.toSet = "";
@@ -354,7 +360,7 @@ EvoEditor.SetAlignment = function(alignment)
 	else
 		throw "EvoEditor.SetAlignment: Unknown alignment value: '" + alignment + "'";
 
-	traversar.record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment", null, null, true, false);
+	traversar.record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
 	try {
 		EvoEditor.ForeachChildInAffectedContent(affected, traversar);

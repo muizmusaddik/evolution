@@ -65,7 +65,7 @@ EvoSelection.FindElementByPath = function(parent, path)
 		var idx = path[ii];
 
 		if (idx < 0 || idx >= child.children.length) {
-			throw "EvoSelection.FindElementByPath:: Index '" + idx + "' out of range '" + parent.children.length + "'";
+			throw "EvoSelection.FindElementByPath:: Index '" + idx + "' out of range '" + child.children.length + "'";
 		}
 
 		child = child.children.item(idx);

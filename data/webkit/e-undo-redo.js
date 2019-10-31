@@ -25,11 +25,6 @@ var EvoUndoRedo = {
 	E_UNDO_REDO_STATE_CAN_UNDO : 1 << 0,
 	E_UNDO_REDO_STATE_CAN_REDO : 1 << 1,
 
-	/* Flags for StartRecord() */
-	FLAG_NONE : 0,
-	FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
-	FLAG_SAVE_HTML : 1 << 1,
-
 	stack : {
 		// to not claim changes when none being made
 		state : -1,
@@ -270,32 +265,10 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 		return;
 	}
 
-	var opType = inputEvent.inputType, useParentBlockNode = false;
+	var opType = inputEvent.inputType;
 
-	if (opType == "" || // some WebKit-specific editing commands use this
-	    opType.startsWith("format") ||
-	    opType == "insertLineBreak" ||
-	    opType == "insertParagraph") {
-		useParentBlockNode = true;
-		var startNode;
-
-		startNode = document.getSelection().baseNode;
-
-		if (!startNode) {
-			startNode = document.body;
-		}
-
-		while (startNode && !(startNode === document.body)) {
-			if (EvoEditor.IsBlockNode(startNode)) {
-				break;
-			}
-
-			startNode = startNode.parentElement;
-		}
-	}
-
-	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, startNode, null,
-		EvoUndoRedo.FLAG_SAVE_HTML | (useParentBlockNode ? EvoUndoRedo.FLAG_USE_PARENT_BLOCK_NODE : EvoUndoRedo.FLAG_NONE));
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null,
+		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 }
 
 EvoUndoRedo.input_cb = function(inputEvent)
@@ -389,11 +362,11 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 				tmpNode.innerHTML = record.htmlAfter;
 			}
 
-			if (first + 1 < commonParent.children.length) {
-				first = commonParent.children.item(first + 1);
+			if (first < commonParent.children.length) {
+				first = commonParent.children.item(first);
 
-				for (ii = tmpNode.children.length - 1; ii >= 0; ii--) {
-					commonParent.insertBefore(tmpNode.children.item(ii), first);
+				while(tmpNode.firstElementChild) {
+					commonParent.insertBefore(tmpNode.firstElementChild, first);
 				}
 			} else {
 				while(tmpNode.children.length) {
@@ -420,9 +393,7 @@ EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode, flags)
 		return null;
 	}
 
-	var record = {}, saveHTML;
-
-	saveHTML = (flags & EvoUndoRedo.FLAG_SAVE_HTML) != 0;
+	var record = {};
 
 	record.kind = kind;
 	record.opType = opType;
@@ -433,13 +404,13 @@ EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode, flags)
 	} else if (kind != EvoUndoRedo.RECORD_KIND_GROUP) {
 		var affected;
 
-		affected = EvoEditor.ClaimAffectedContent(startNode, endNode, (flags & EvoUndoRedo.FLAG_USE_PARENT_BLOCK_NODE) != 0, saveHTML);
+		affected = EvoEditor.ClaimAffectedContent(startNode, endNode, flags);
 
 		record.path = affected.path;
 		record.firstChildIndex = affected.firstChildIndex;
 		record.restChildrenCount = affected.restChildrenCount;
 
-		if (saveHTML)
+		if ((flags & EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML) != 0)
 			record.htmlBefore = affected.html;
 	}
 
