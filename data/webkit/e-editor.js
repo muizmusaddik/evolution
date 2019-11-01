@@ -48,8 +48,207 @@ var EvoEditor = {
 	CLAIM_CONTENT_FLAG_SAVE_HTML : 1 << 1,
 
 	htmlFormat : false,
-	storedSelection : null
+	storedSelection : null,
+	formattingState : {
+		baseElement : null, // to avoid often notifications when just moving within the same node
+		bold : false,
+		italic : false,
+		underline : false,
+		strikethrough : false,
+		script : 0, // -1..subscript, 0..normal, +1..superscript
+		blockFormat : -1,
+		alignment : -1,
+		fgColor : null,
+		bgColor : null,
+		fontSize : null,
+		fontFamily : null,
+		indented : false
+	}
 };
+
+EvoEditor.maybeUpdateFormattingState = function(force)
+{
+	var baseElem;
+
+	baseElem = document.getSelection().baseNode;
+	if (!baseElem)
+		baseElem = document.body ? document.body.firstElementChild : null;
+
+	if (baseElem && baseElem.nodeType == baseElem.TEXT_NODE)
+		baseElem = baseElem.parentElement;
+
+	if (!force && EvoEditor.formattingState.baseElement === baseElem) {
+		return;
+	}
+
+	EvoEditor.formattingState.baseElement = baseElem;
+
+	var changes = {}, nchanges = 0, value, tmp, computedStyle;
+
+	computedStyle = baseElem ? window.getComputedStyle(baseElem) : null;
+
+	value = (computedStyle ? computedStyle.fontWeight : "") == "bold";
+	if (value != EvoEditor.formattingState.bold) {
+		EvoEditor.formattingState.bold = value;
+		changes["bold"] = value;
+		nchanges++;
+	}
+
+	tmp = computedStyle ? computedStyle.fontStyle : "";
+
+	value = tmp == "italic" || tmp == "oblique";
+	if (value != EvoEditor.formattingState.italic) {
+		EvoEditor.formattingState.italic = value;
+		changes["italic"] = value;
+		nchanges++;
+	}
+
+	tmp = computedStyle ? computedStyle.webkitTextDecorationsInEffect : "";
+
+	value = tmp.search("underline") >= 0;
+	if (value != EvoEditor.formattingState.underline) {
+		EvoEditor.formattingState.underline = value;
+		changes["underline"] = value;
+		nchanges++;
+	}
+
+	value = tmp.search("line-through") >= 0;
+	if (value != EvoEditor.formattingState.strikethrough) {
+		EvoEditor.formattingState.strikethrough = value;
+		changes["strikethrough"] = value;
+		nchanges++;
+	}
+
+	value = computedStyle ? computedStyle.fontFamily : "";
+	if (value != EvoEditor.formattingState.fontFamily) {
+		EvoEditor.formattingState.fontFamily = value;
+		changes["fontFamily"] = value;
+		nchanges++;
+	}
+
+	value = computedStyle ? computedStyle.color : "";
+	if (value != EvoEditor.formattingState.fgColor) {
+		EvoEditor.formattingState.fgColor = value;
+		changes["fgColor"] = value;
+		nchanges++;
+	}
+
+	value = computedStyle ? computedStyle.backgroundColor : "";
+	if (value != EvoEditor.formattingState.bgColor) {
+		EvoEditor.formattingState.bgColor = value;
+		changes["bgColor"] = value;
+		nchanges++;
+	}
+
+	tmp = computedStyle ? computedStyle.textIndent : "";
+	tmp = parseInt(tmp);
+	value = Number.isInteger(tmp) && tmp > 0;
+	if (value != EvoEditor.formattingState.indented) {
+		EvoEditor.formattingState.indented = value;
+		changes["indented"] = value;
+		nchanges++;
+	}
+
+	tmp = (computedStyle ? computedStyle.textAlign : "").toLowerCase();
+	if (tmp == "")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
+	else if (tmp == "left" || tmp == "start")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_LEFT;
+	else if (tmp == "right")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_RIGHT;
+	else if (tmp == "center")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_CENTER;
+	else if (tmp == "justify")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY;
+	else
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
+
+	if (value != EvoEditor.formattingState.alignment) {
+		EvoEditor.formattingState.alignment = value;
+		changes["alignment"] = value;
+		nchanges++;
+	}
+
+	var parent, obj = {
+		script : 0,
+		blockFormat : null,
+		fontSize : null,
+	};
+
+	for (parent = baseElem; parent && !(parent == document.body) &&
+	     obj.script == 0 && obj.blockFormat == null && obj.fontSize == null && obj.indented == null;
+	     parent = parent.parentElement) {
+		if (obj.script == 0) {
+			if (parent.tagName == "SUB")
+				obj.script = -1;
+			else if (parent.tagName == "SUP")
+				obj.script = +1;
+		}
+
+		if (obj.blockFormat == null) {
+			if (parent.tagName == "DIV")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH;
+			else if (parent.tagName == "PRE")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PRE;
+			else if (parent.tagName == "ADDRESS")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ADDRESS;
+			else if (parent.tagName == "H1")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H1;
+			else if (parent.tagName == "H2")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H2;
+			else if (parent.tagName == "H3")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H3;
+			else if (parent.tagName == "H4")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H4;
+			else if (parent.tagName == "H5")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H5;
+			else if (parent.tagName == "H6")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H6;
+			else if (parent.tagName == "UL")
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_UNORDERED_LIST;
+			else if (parent.tagName == "OL") {
+				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST;
+
+				if (parent.getAttribute("type").toUpperCase() == "I")
+					obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN;
+				else if (parent.getAttribute("type").toUpperCase() == "I")
+					obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA;
+			}
+		}
+
+		if (obj.fontSize == null && parent.tagName == "FONT" && parent.hasAttribute("size")) {
+			value = parent.getAttribute("size");
+			value = value ? parseInt(value, 10) : 0;
+			if (Number.isInteger(value) && value >= 1 && value <= 7) {
+				obj.fontSize = value;
+			}
+		}
+	}
+
+	value = obj.script;
+	if (value != EvoEditor.formattingState.script) {
+		EvoEditor.formattingState.script = value;
+		changes["script"] = value;
+		nchanges++;
+	}
+
+	value = obj.blockFormat;
+	if (value != EvoEditor.formattingState.blockFormat) {
+		EvoEditor.formattingState.blockFormat = value;
+		changes["blockFormat"] = value;
+		nchanges++;
+	}
+
+	value = obj.fontSize;
+	if (value != EvoEditor.formattingState.fontSize) {
+		EvoEditor.formattingState.fontSize = value;
+		changes["fontSize"] = value;
+		nchanges++;
+	}
+
+	if (nchanges > 0)
+		window.webkit.messageHandlers.formattingChanged.postMessage(changes);
+}
 
 EvoEditor.IsBlockNode = function(node)
 {
@@ -676,3 +875,5 @@ document.onload = function() {
 		document.getSelection.setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
 	}
 }
+
+document.onselectionchange = function() { EvoEditor.maybeUpdateFormattingState(false); };

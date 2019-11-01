@@ -362,6 +362,7 @@ EvoUndoRedo.Disable = function()
 EvoUndoRedo.isWordDelimEvent = function(inputEvent)
 {
 	return inputEvent.inputType == "insertText" &&
+		inputEvent.data &&
 		inputEvent.data.length == 1 &&
 		(inputEvent.data == " " || inputEvent.data == "\t");
 }
