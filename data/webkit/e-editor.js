@@ -80,10 +80,17 @@ EvoEditor.foreachChildRecur = function(topParent, parent, firstChildIndex, lastC
 		return false;
 	}
 
-	var ii;
+	if (firstChildIndex >= parent.children.length) {
+		return true;
+	}
 
-	for (ii = firstChildIndex; ii < parent.children.length && ii <= lastChildIndex; ii++) {
-		var child = parent.children.item(ii);
+	var ii, child, next;
+
+	ii = lastChildIndex - firstChildIndex;
+	child = parent.children.item(firstChildIndex);
+
+	while (child && ii >= 0) {
+		next = child.nextElementSibling;
 
 		if (!traversar.onlyBlockElements || EvoEditor.IsBlockNode(child)) {
 			if (!traversar.exec(topParent, child)) {
@@ -96,6 +103,9 @@ EvoEditor.foreachChildRecur = function(topParent, parent, firstChildIndex, lastC
 		    !EvoEditor.foreachChildRecur(topParent, child, 0, child.children.length - 1, traversar)) {
 			return false;
 		}
+
+		child = next;
+		ii--;
 	}
 
 	return true;
@@ -146,18 +156,18 @@ EvoEditor.GetCommonParent = function(firstNode, secondNode)
 		return null;
 	}
 
-	var commonParent, secondParent;
-
-	if (secondParent === document.body) {
+	if (firstNode === document.body || secondNode === document.body) {
 		return document.body;
 	}
+
+	var commonParent, secondParent;
 
 	for (commonParent = firstNode.parentElement; commonParent; commonParent = commonParent.parentElement) {
 		if (commonParent === document.body) {
 			break;
 		}
 
-		for (secondParent = secondNode.parentElement; secondNode; secondNode = secondNode.parentElement) {
+		for (secondParent = secondNode.parentElement; secondParent; secondParent = secondParent.parentElement) {
 			if (secondParent === document.body) {
 				break;
 			}
@@ -339,26 +349,33 @@ EvoEditor.SetAlignment = function(alignment)
 				}
 
 				element.style.textAlign = traversar.toSet;
-
-				return true;
 			}
+
+			return true;
 		}
 	};
 
 	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
-	if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE)
+	switch (alignment) {
+	case EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE:
 		traversar.toSet = "";
-	else if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_LEFT)
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_LEFT:
 		traversar.toSet = "left";
-	else if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_CENTER)
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_CENTER:
 		traversar.toSet = "center";
-	else if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_RIGHT)
+		break;
+	case  EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_RIGHT:
 		traversar.toSet = "right";
-	else if (alignment == EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY)
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY:
 		traversar.toSet = "justify";
-	else
+		break;
+	default:
 		throw "EvoEditor.SetAlignment: Unknown alignment value: '" + alignment + "'";
+	}
 
 	traversar.record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
@@ -374,8 +391,283 @@ EvoEditor.SetAlignment = function(alignment)
 	}
 }
 
+EvoEditor.storeAttributes = function(element)
+{
+	if (!element || !element.attributes.length)
+		return null;
+
+	var attributes = [], ii;
+
+	for (ii = 0; ii < element.attributes.length; ii++) {
+		var attr = {
+			name : element.attributes.item(ii).name,
+			value : element.attributes.item(ii).value
+		};
+
+		attributes[attributes.length] = attr;
+	}
+
+	return attributes;
+}
+
+EvoEditor.restoreAttributes = function(element, attributes)
+{
+	if (!element)
+		return;
+
+	while (element.attributes.length) {
+		element.removeAttribute(element.attributes.item(element.attributes.length - 1).name);
+	}
+
+	if (!attributes)
+		return;
+
+	var ii;
+
+	for (ii = 0; ii < attributes.length; ii++) {
+		element.setAttribute(attributes[ii].name, attributes[ii].value);
+	}
+}
+
+EvoEditor.storeElement = function(element)
+{
+	if (!element)
+		return null;
+
+	var elementRecord = {
+		tagName : element.tagName,
+		attributes : EvoEditor.storeAttributes(element)
+	};
+
+	return elementRecord;
+}
+
+EvoEditor.restoreElement = function(parentElement, beforeElement, tagName, attributes)
+{
+	if (!parentElement)
+		throw "EvoEditor.restoreElement: parentElement cannot be null";
+
+	if (!tagName)
+		throw "EvoEditor.restoreElement: tagName cannot be null";
+
+	var node;
+
+	node = parentElement.ownerDocument.createElement(tagName);
+
+	EvoEditor.restoreAttributes(node, attributes);
+
+	parentElement.insertBefore(node, beforeElement);
+
+	return node;
+}
+
+EvoEditor.moveChildren = function(fromElement, toElement, beforeElement, prepareParent)
+{
+	if (!fromElement)
+		throw "EvoEditor.moveChildren: fromElement cannot be null";
+
+	if (beforeElement && toElement && !(beforeElement.parentElement === toElement))
+		throw "EvoEditor.moveChildren: beforeElement is not a direct child of toElement";
+
+	var node;
+
+	for (node = toElement; node; node = node.parentElement) {
+		if (node === fromElement)
+			throw "EvoEditor.moveChildren: toElement cannot be child of fromElement";
+	}
+
+	var firstElement = toElement;
+
+	while (fromElement.firstChild) {
+		if (prepareParent && fromElement.firstChild.tagName && fromElement.firstChild.tagName == "LI") {
+			var toParent = prepareParent.exec();
+
+			if (toElement) {
+				toElement.parentElement.insertBefore(toParent, toElement.nextElementSibling);
+			}
+
+			if (!firstElement) {
+				firstElement = toParent;
+			}
+
+			var li = fromElement.firstChild;
+
+			while (li.firstChild) {
+				toParent.append(li.firstChild);
+			}
+
+			fromElement.removeChild(fromElement.firstChild);
+		} else {
+			if (!toElement && prepareParent) {
+				toElement = prepareParent.exec();
+			}
+
+			if (!firstElement) {
+				firstElement = toElement;
+			}
+
+			toElement.insertBefore(fromElement.firstChild, beforeElement);
+		}
+	}
+
+	return firstElement;
+}
+
+EvoEditor.renameElement = function(element, tagName, attributes, targetElement)
+{
+	var prepareParent = {
+		element : element,
+		tagName : tagName,
+		attributes : attributes,
+		targetElement : targetElement,
+
+		exec : function() {
+			if (targetElement)
+				return EvoEditor.restoreElement(prepareParent.targetElement, null, prepareParent.tagName, prepareParent.attributes);
+			else
+				return EvoEditor.restoreElement(prepareParent.element.parentElement, prepareParent.element, prepareParent.tagName, prepareParent.attributes);
+		}
+	};
+	var newElement;
+
+	newElement = EvoEditor.moveChildren(element, null, null, prepareParent);
+
+	element.parentElement.removeChild(element);
+
+	return newElement;
+}
+
 EvoEditor.SetBlockFormat = function(format)
 {
+	var traversar = {
+		toSet : null,
+		createParent : null,
+		firstLI : true,
+		targetElement : null,
+		selectionBaseNode : null,
+		selectionBaseOffset : -1,
+		selectionExtentNode : null,
+		selectionExtentOffset : -1,
+
+		flat : true,
+		onlyBlockElements : true,
+
+		exec : function(parent, element) {
+			var newElement, changeBase = false, changeExtent = false;
+
+			if (traversar.selectionBaseNode) {
+				changeBase = element === traversar.selectionBaseNode ||
+					(traversar.selectionBaseNode.noteType == traversar.selectionBaseNode.TEXT_NODE &&
+					 traversar.selectionBaseNode.parentElement === element);
+			}
+
+			if (traversar.selectionExtentNode) {
+				changeExtent = element === traversar.selectionExtentNode ||
+					(traversar.selectionExtentNode.noteType == traversar.selectionExtentNode.TEXT_NODE &&
+					 traversar.selectionExtentNode.parentElement === element);
+			}
+
+			if (traversar.firstLI) {
+				if (traversar.createParent) {
+					traversar.targetElement = EvoEditor.restoreElement(parent, element, traversar.createParent.tagName, traversar.createParent.attributes);
+				}
+
+				traversar.firstLI = false;
+			}
+
+			newElement = EvoEditor.renameElement(element, traversar.toSet.tagName, traversar.toSet.attributes, traversar.targetElement);
+
+			if (changeBase)
+				traversar.selectionBaseNode = newElement;
+
+			if (changeExtent)
+				traversar.selectionExtentNode = newElement;
+
+			return true;
+		}
+	};
+
+	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+
+	switch (format) {
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH:
+		traversar.toSet = { tagName : "DIV" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PRE:
+		traversar.toSet = { tagName : "PRE" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ADDRESS:
+		traversar.toSet = { tagName : "ADDRESS" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H1:
+		traversar.toSet = { tagName : "H1" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H2:
+		traversar.toSet = { tagName : "H2" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H3:
+		traversar.toSet = { tagName : "H3" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H4:
+		traversar.toSet = { tagName : "H4" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H5:
+		traversar.toSet = { tagName : "H5" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_H6:
+		traversar.toSet = { tagName : "H6" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_UNORDERED_LIST:
+		traversar.toSet = { tagName : "LI" };
+		traversar.createParent = { tagName : "UL" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST:
+		traversar.toSet = { tagName : "LI" };
+		traversar.createParent = { tagName : "OL" };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN:
+		traversar.toSet = { tagName : "LI" };
+		traversar.createParent = { tagName : "OL", attributes : [ { name : "type", value : "I" } ] };
+		break;
+	case EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA:
+		traversar.toSet = { tagName : "LI" };
+		traversar.createParent = { tagName : "OL", attributes : [ { name : "type", value : "A" } ] };
+		break;
+	default:
+		throw "EvoEditor.SetBlockFormat: Unknown block format value: '" + format + "'";
+	}
+
+	var selectionBefore = EvoSelection.Store(document);
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat", null, null,
+		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+	traversar.selectionBaseNode = document.getSelection().baseNode;
+	traversar.selectionBaseOffset = document.getSelection().baseOffset;
+	traversar.selectionExtentNode = document.getSelection().extentNode;
+	traversar.selectionExtentOffset = document.getSelection().extentOffset;
+
+	try {
+		EvoEditor.ForeachChildInAffectedContent(affected, traversar);
+
+		if (traversar.selectionBaseNode && traversar.selectionBaseNode.parentElement) {
+			var selection = {
+				baseElem : EvoSelection.GetChildPath(document.body, traversar.selectionBaseNode),
+				baseOffset : traversar.selectionBaseOffset
+			};
+
+			if (traversar.selectionExtentNode) {
+				selection.extentElem = EvoSelection.GetChildPath(document.body, traversar.selectionExtentNode);
+				selection.extentOffset = traversar.selectionExtentOffset;
+			}
+
+			EvoSelection.Restore(document, selection);
+		} else {
+			EvoSelection.Restore(document, selectionBefore);
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat");
+	}
 }
 
 document.onload = function() {
