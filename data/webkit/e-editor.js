@@ -64,7 +64,11 @@ var EvoEditor = {
 		bgColor : null,
 		fontSize : null,
 		fontFamily : null,
-		indented : false
+		indented : false,
+		bodyFgColor : null,
+		bodyBgColor : null,
+		bodyLinkColor : null,
+		bodyVlinkColor : null
 	}
 };
 
@@ -129,6 +133,8 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	}
 
 	value = computedStyle ? computedStyle.color : "";
+	if (value == "-webkit-standard")
+		value = "";
 	if (value != EvoEditor.formattingState.fgColor) {
 		EvoEditor.formattingState.fgColor = value;
 		changes["fgColor"] = value;
@@ -159,6 +165,34 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	if (value != EvoEditor.formattingState.alignment) {
 		EvoEditor.formattingState.alignment = value;
 		changes["alignment"] = value;
+		nchanges++;
+	}
+
+	value = document.body.text;
+	if (value != EvoEditor.formattingState.bodyFgColor) {
+		EvoEditor.formattingState.bodyFgColor = value;
+		changes["bodyFgColor"] = value;
+		nchanges++;
+	}
+
+	value = document.body.bgColor;
+	if (value != EvoEditor.formattingState.bodyBgColor) {
+		EvoEditor.formattingState.bodyBgColor = value;
+		changes["bodyBgColor"] = value;
+		nchanges++;
+	}
+
+	value = document.body.link;
+	if (value != EvoEditor.formattingState.bodyLinkColor) {
+		EvoEditor.formattingState.bodyLinkColor = value;
+		changes["bodyLinkColor"] = value;
+		nchanges++;
+	}
+
+	value = document.body.vLink;
+	if (value != EvoEditor.formattingState.bodyVlinkColor) {
+		EvoEditor.formattingState.bodyVlinkColor = value;
+		changes["bodyVlinkColor"] = value;
 		nchanges++;
 	}
 
@@ -249,7 +283,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		nchanges++;
 	}
 
-	value = obj.blockFormat;
+	value = obj.blockFormat == null ? EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH : obj.blockFormat;
 	if (value != EvoEditor.formattingState.blockFormat) {
 		EvoEditor.formattingState.blockFormat = value;
 		changes["blockFormat"] = value;
@@ -512,6 +546,12 @@ EvoEditor.ForeachChildInAffectedContent = function(affected, traversar)
 	return EvoEditor.ForeachChild(parent, firstChildIndex, lastChildIndex, traversar);
 }
 
+EvoEditor.EmitContentChanged = function()
+{
+	if (window.webkit.messageHandlers.contentChanged)
+		window.webkit.messageHandlers.contentChanged.postMessage(null);
+}
+
 EvoEditor.StoreSelection = function()
 {
 	EvoEditor.storedSelection = EvoSelection.Store(document);
@@ -553,6 +593,7 @@ EvoEditor.SetAlignment = function(alignment)
 	var traversar = {
 		record : null,
 		toSet : null,
+		anyChanged : false,
 
 		flat : false,
 		onlyBlockElements : true,
@@ -571,6 +612,7 @@ EvoEditor.SetAlignment = function(alignment)
 					traversar.record.changes[traversar.record.changes.length] = change;
 				}
 
+				traversar.anyChanged = true;
 				element.style.textAlign = traversar.toSet;
 			}
 
@@ -612,6 +654,9 @@ EvoEditor.SetAlignment = function(alignment)
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment");
 		EvoEditor.maybeUpdateFormattingState(true);
+
+		if (traversar.anyChanged)
+			EvoEditor.EmitContentChanged();
 	}
 }
 
@@ -894,6 +939,7 @@ EvoEditor.SetBlockFormat = function(format)
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat");
 		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.EmitContentChanged();
 	}
 }
 
@@ -1011,6 +1057,7 @@ EvoEditor.Indent = function(increment)
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent");
 		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.EmitContentChanged();
 	}
 }
 
@@ -1022,6 +1069,47 @@ EvoEditor.InsertHTML = function(opType, html)
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType);
 		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.EmitContentChanged();
+	}
+}
+
+EvoEditor.applySetBodyAttribute = function(record, isUndo)
+{
+	if (isUndo) {
+		if (record.beforeValue)
+			document.body.setAttribute(record.attrName, record.beforeValue);
+		else
+			document.body.removeAttribute(record.attrName);
+	} else {
+		if (record.attrValue)
+			document.body.setAttribute(record.attrName, record.attrValue);
+		else
+			document.body.removeAttribute(record.attrName);
+	}
+}
+
+EvoEditor.SetBodyAttribute = function(name, value)
+{
+	var record;
+
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyAttribute::" + name, document.body, document.body, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+
+	try {
+		if (record) {
+			record.attrName = name;
+			record.attrValue = value;
+			record.beforeValue = document.body.getAttribute(name);
+			record.apply = EvoEditor.applySetBodyAttribute;
+		}
+
+		if (value)
+			document.body.setAttribute(name, value);
+		else
+			document.body.removeAttribute(name);
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyAttribute::" + name);
+		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.EmitContentChanged();
 	}
 }
 

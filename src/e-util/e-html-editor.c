@@ -768,7 +768,15 @@ html_editor_constructed (GObject *object)
 	gtk_container_add (GTK_CONTAINER (tool_item), widget);
 	gtk_widget_set_tooltip_text (widget, _("Font Color"));
 	gtk_toolbar_insert (toolbar, tool_item, 0);
-	priv->color_combo_box = g_object_ref (widget);
+	priv->fg_color_combo_box = g_object_ref (widget);
+	gtk_widget_show_all (GTK_WIDGET (tool_item));
+
+	tool_item = gtk_tool_item_new ();
+	widget = e_color_combo_new ();
+	gtk_container_add (GTK_CONTAINER (tool_item), widget);
+	gtk_widget_set_tooltip_text (widget, _("Background Color"));
+	gtk_toolbar_insert (toolbar, tool_item, 1);
+	priv->bg_color_combo_box = g_object_ref (widget);
 	gtk_widget_show_all (GTK_WIDGET (tool_item));
 
 	tool_item = gtk_tool_item_new ();
@@ -809,7 +817,8 @@ html_editor_dispose (GObject *object)
 	g_clear_object (&priv->alert_bar);
 	g_clear_object (&priv->edit_area);
 
-	g_clear_object (&priv->color_combo_box);
+	g_clear_object (&priv->fg_color_combo_box);
+	g_clear_object (&priv->bg_color_combo_box);
 	g_clear_object (&priv->mode_combo_box);
 	g_clear_object (&priv->size_combo_box);
 	g_clear_object (&priv->style_combo_box);
@@ -942,12 +951,20 @@ e_html_editor_content_editor_initialized (EContentEditor *content_editor,
 	g_return_if_fail (content_editor == e_html_editor_get_content_editor (html_editor));
 
 	e_binding_bind_property (
-		html_editor->priv->color_combo_box, "current-color",
+		html_editor->priv->fg_color_combo_box, "current-color",
 		content_editor, "font-color",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 	e_binding_bind_property (
 		content_editor, "editable",
-		html_editor->priv->color_combo_box, "sensitive",
+		html_editor->priv->fg_color_combo_box, "sensitive",
+		G_BINDING_SYNC_CREATE);
+	e_binding_bind_property (
+		html_editor->priv->bg_color_combo_box, "current-color",
+		content_editor, "background-color",
+		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+	e_binding_bind_property (
+		content_editor, "editable",
+		html_editor->priv->bg_color_combo_box, "sensitive",
 		G_BINDING_SYNC_CREATE);
 	editor_actions_bind (html_editor);
 

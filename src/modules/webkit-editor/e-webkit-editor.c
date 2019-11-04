@@ -78,8 +78,6 @@ struct _EWebKitEditorPrivate {
 	EWebExtensionContainer *container;
 	GDBusProxy *web_extension_proxy;
 	gint stamp; /* Changed only in the main thread, doesn't need locking */
-	guint web_extension_selection_changed_cb_id;
-	guint web_extension_content_changed_cb_id;
 	guint web_extension_user_changed_default_colors_cb_id;
 
 	gboolean html_mode;
@@ -104,6 +102,10 @@ struct _EWebKitEditorPrivate {
 
 	GdkRGBA *background_color;
 	GdkRGBA *font_color;
+	GdkRGBA *body_fg_color;
+	GdkRGBA *body_bg_color;
+	GdkRGBA *body_link_color;
+	GdkRGBA *body_vlink_color;
 
 	gchar *font_name;
 
@@ -350,62 +352,74 @@ webkit_editor_set_can_redo (EWebKitEditor *wk_editor,
 }
 
 static void
-web_extension_content_changed_cb (GDBusConnection *connection,
-                                  const gchar *sender_name,
-                                  const gchar *object_path,
-                                  const gchar *interface_name,
-                                  const gchar *signal_name,
-                                  GVariant *parameters,
-                                  EWebKitEditor *wk_editor)
+content_changed_cb (WebKitUserContentManager *manager,
+		    WebKitJavascriptResult *js_result,
+		    gpointer user_data)
 {
-	if (g_strcmp0 (signal_name, "ContentChanged") != 0)
-		return;
+	EWebKitEditor *wk_editor = user_data;
 
-	if (parameters) {
-		guint64 page_id = 0;
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-		g_variant_get (parameters, "(t)", &page_id);
+	webkit_editor_set_changed (wk_editor, TRUE);
+}
 
-		if (page_id == webkit_web_view_get_page_id (WEBKIT_WEB_VIEW (wk_editor)))
-			webkit_editor_set_changed (wk_editor, TRUE);
+static gboolean
+webkit_editor_update_color_value (JSCValue *jsc_params,
+				  const gchar *param_name,
+				  GdkRGBA **out_rgba)
+{
+	JSCValue *jsc_value;
+	GdkRGBA color;
+	gboolean res = FALSE;
+
+	g_return_val_if_fail (jsc_params != NULL, FALSE);
+	g_return_val_if_fail (out_rgba != NULL, FALSE);
+
+	jsc_value = jsc_value_object_get_property (jsc_params, param_name);
+	if (jsc_value && jsc_value_is_string (jsc_value)) {
+		gchar *value;
+
+		value = jsc_value_to_string (jsc_value);
+
+		if (value && *value && gdk_rgba_parse (&color, value)) {
+			if (!(*out_rgba) || !gdk_rgba_equal (&color, *out_rgba)) {
+				if (*out_rgba)
+					gdk_rgba_free (*out_rgba);
+				*out_rgba = gdk_rgba_copy (&color);
+
+				res = TRUE;
+			}
+		} else {
+			if (*out_rgba) {
+				gdk_rgba_free (*out_rgba);
+				res = TRUE;
+			}
+
+			*out_rgba = NULL;
+		}
+
+		g_free (value);
 	}
+
+	g_clear_object (&jsc_value);
+
+	return res;
 }
 
 static void
-web_extension_selection_changed_cb (GDBusConnection *connection,
-                                    const gchar *sender_name,
-                                    const gchar *object_path,
-                                    const gchar *interface_name,
-                                    const gchar *signal_name,
-                                    GVariant *parameters,
-                                    EWebKitEditor *wk_editor)
+formatting_changed_cb (WebKitUserContentManager *manager,
+		       WebKitJavascriptResult *js_result,
+		       gpointer user_data)
 {
-	guint64 page_id = 0;
-	gchar *font_color = NULL;
-	guint32 alignment, block_format, style_flags, font_size;
-	gboolean is_indented;
+	EWebKitEditor *wk_editor = user_data;
+	JSCValue *jsc_params, *jsc_value;
+	GObject *object;
+	guint32 style_flags;
 
-	if (g_strcmp0 (signal_name, "SelectionChanged") != 0)
-		return;
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	if (!parameters)
-		return;
-
-	g_variant_get (
-		parameters,
-		"(tiibiis)",
-		&page_id,
-		&alignment,
-		&block_format,
-		&is_indented,
-		&style_flags,
-		&font_size,
-		&font_color);
-
-	if (page_id != webkit_web_view_get_page_id (WEBKIT_WEB_VIEW (wk_editor))) {
-		g_free (font_color);
-		return;
-	}
+	jsc_params = webkit_javascript_result_get_js_value (js_result);
+	g_return_if_fail (jsc_value_is_object (jsc_params));
 
 	webkit_web_view_can_execute_editing_command (
 		WEBKIT_WEB_VIEW (wk_editor),
@@ -428,49 +442,140 @@ web_extension_selection_changed_cb (GDBusConnection *connection,
 		(GAsyncReadyCallback) webkit_editor_can_paste_cb,
 		wk_editor);
 
-	g_object_freeze_notify (G_OBJECT (wk_editor));
+	object = G_OBJECT (wk_editor);
 
-	wk_editor->priv->alignment = alignment;
-	wk_editor->priv->block_format = block_format;
-	wk_editor->priv->is_indented = is_indented;
-	wk_editor->priv->style_flags = style_flags;
-	wk_editor->priv->font_size = font_size;
+	g_object_freeze_notify (object);
 
-	if (wk_editor->priv->html_mode) {
-		GdkRGBA color;
+	jsc_value = jsc_value_object_get_property (jsc_params, "alignment");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
 
-		if (font_color && *font_color && gdk_rgba_parse (&color, font_color)) {
-			if (wk_editor->priv->font_color)
-				gdk_rgba_free (wk_editor->priv->font_color);
-			wk_editor->priv->font_color = gdk_rgba_copy (&color);
+		if (value != wk_editor->priv->alignment) {
+			wk_editor->priv->alignment = value;
+			g_object_notify (object, "alignment");
 		}
 	}
-	g_free (font_color);
+	g_clear_object (&jsc_value);
 
-	g_object_notify (G_OBJECT (wk_editor), "can-undo");
-	g_object_notify (G_OBJECT (wk_editor), "can-redo");
+	jsc_value = jsc_value_object_get_property (jsc_params, "blockFormat");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
 
-	g_object_notify (G_OBJECT (wk_editor), "alignment");
-	g_object_notify (G_OBJECT (wk_editor), "block-format");
-	g_object_notify (G_OBJECT (wk_editor), "indented");
+		if (value != wk_editor->priv->block_format) {
+			wk_editor->priv->block_format = value;
+			g_object_notify (object, "block-format");
+		}
+	}
+	g_clear_object (&jsc_value);
 
-	if (wk_editor->priv->html_mode) {
-		/* g_object_notify (G_OBJECT (wk_editor), "background-color"); */
+	jsc_value = jsc_value_object_get_property (jsc_params, "indented");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		gboolean value = jsc_value_to_boolean (jsc_value);
+
+		if ((value ? 1: 0) != (wk_editor->priv->is_indented ? 1 : 0)) {
+			wk_editor->priv->is_indented = value;
+			g_object_notify (object, "indented");
+		}
+	}
+	g_clear_object (&jsc_value);
+
+	style_flags = E_CONTENT_EDITOR_STYLE_NONE;
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "bold");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		gboolean value = jsc_value_to_boolean (jsc_value);
+
+		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_BOLD : 0);
+
 		g_object_notify (G_OBJECT (wk_editor), "bold");
-		/* g_object_notify (G_OBJECT (wk_editor), "font-name"); */
-		g_object_notify (G_OBJECT (wk_editor), "font-size");
-		g_object_notify (G_OBJECT (wk_editor), "font-color");
+	}
+	g_clear_object (&jsc_value);
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "italic");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		gboolean value = jsc_value_to_boolean (jsc_value);
+
+		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_ITALIC : 0);
+
 		g_object_notify (G_OBJECT (wk_editor), "italic");
-		g_object_notify (G_OBJECT (wk_editor), "monospaced");
-		g_object_notify (G_OBJECT (wk_editor), "strikethrough");
-		g_object_notify (G_OBJECT (wk_editor), "subscript");
-		g_object_notify (G_OBJECT (wk_editor), "superscript");
+	}
+	g_clear_object (&jsc_value);
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "underline");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		gboolean value = jsc_value_to_boolean (jsc_value);
+
+		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_UNDERLINE : 0);
+
 		g_object_notify (G_OBJECT (wk_editor), "underline");
 	}
+	g_clear_object (&jsc_value);
 
-	g_object_thaw_notify (G_OBJECT (wk_editor));
+	jsc_value = jsc_value_object_get_property (jsc_params, "strikethrough");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		gboolean value = jsc_value_to_boolean (jsc_value);
+
+		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH : 0);
+
+		g_object_notify (G_OBJECT (wk_editor), "strikethrough");
+	}
+	g_clear_object (&jsc_value);
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "script");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
+
+		style_flags |= (value < 0 ? E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT : (value > 0 ? E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT : 0));
+
+		if ((wk_editor->priv->style_flags & E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT) != (style_flags & E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT))
+			g_object_notify (object, "subscript");
+
+		if ((wk_editor->priv->style_flags & E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT) != (style_flags & E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT))
+			g_object_notify (object, "superscript");
+	}
+	g_clear_object (&jsc_value);
+
+	if (wk_editor->priv->style_flags != style_flags)
+		wk_editor->priv->style_flags = style_flags;
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "fontSize");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
+
+		if (value != wk_editor->priv->font_size) {
+			wk_editor->priv->font_size = value;
+			g_object_notify (object, "font-size");
+		}
+	}
+	g_clear_object (&jsc_value);
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "fontFamily");
+	if (jsc_value && jsc_value_is_string (jsc_value)) {
+		gchar *value = jsc_value_to_string (jsc_value);
+
+		if (g_strcmp0 (value, wk_editor->priv->font_name) != 0) {
+			g_free (wk_editor->priv->font_name);
+			wk_editor->priv->font_name = value;
+			g_object_notify (object, "font-name");
+		} else {
+			g_free (value);
+		}
+	}
+	g_clear_object (&jsc_value);
+
+	if (webkit_editor_update_color_value (jsc_params, "fgColor", &wk_editor->priv->font_color))
+		g_object_notify (object, "font-color");
+
+	if (webkit_editor_update_color_value (jsc_params, "bgColor", &wk_editor->priv->background_color))
+		g_object_notify (object, "background-color");
+
+	webkit_editor_update_color_value (jsc_params, "bodyFgColor", &wk_editor->priv->body_fg_color);
+	webkit_editor_update_color_value (jsc_params, "bodyBgColor", &wk_editor->priv->body_bg_color);
+	webkit_editor_update_color_value (jsc_params, "bodyLinkColor", &wk_editor->priv->body_link_color);
+	webkit_editor_update_color_value (jsc_params, "bodyVlinkColor", &wk_editor->priv->body_vlink_color);
+
+	g_object_thaw_notify (object);
 }
-
 
 static void
 undu_redo_state_changed_cb (WebKitUserContentManager *manager,
@@ -601,18 +706,6 @@ e_webkit_editor_set_web_extension_proxy (EWebKitEditor *wk_editor,
 		if (connection && g_dbus_connection_is_closed (connection))
 			connection = NULL;
 
-		if (wk_editor->priv->web_extension_content_changed_cb_id) {
-			if (connection)
-				g_dbus_connection_signal_unsubscribe (connection, wk_editor->priv->web_extension_content_changed_cb_id);
-			wk_editor->priv->web_extension_content_changed_cb_id = 0;
-		}
-
-		if (wk_editor->priv->web_extension_selection_changed_cb_id) {
-			if (connection)
-				g_dbus_connection_signal_unsubscribe (connection, wk_editor->priv->web_extension_selection_changed_cb_id);
-			wk_editor->priv->web_extension_selection_changed_cb_id = 0;
-		}
-
 		if (wk_editor->priv->web_extension_user_changed_default_colors_cb_id) {
 			if (connection)
 				g_dbus_connection_signal_unsubscribe (connection, wk_editor->priv->web_extension_user_changed_default_colors_cb_id);
@@ -624,32 +717,6 @@ e_webkit_editor_set_web_extension_proxy (EWebKitEditor *wk_editor,
 
 	if (proxy) {
 		wk_editor->priv->web_extension_proxy = g_object_ref (proxy);
-
-		wk_editor->priv->web_extension_selection_changed_cb_id =
-			g_dbus_connection_signal_subscribe (
-				g_dbus_proxy_get_connection (wk_editor->priv->web_extension_proxy),
-				g_dbus_proxy_get_name (wk_editor->priv->web_extension_proxy),
-				E_WEBKIT_EDITOR_WEB_EXTENSION_INTERFACE,
-				"SelectionChanged",
-				E_WEBKIT_EDITOR_WEB_EXTENSION_OBJECT_PATH,
-				NULL,
-				G_DBUS_SIGNAL_FLAGS_NONE,
-				(GDBusSignalCallback) web_extension_selection_changed_cb,
-				wk_editor,
-				NULL);
-
-		wk_editor->priv->web_extension_content_changed_cb_id =
-			g_dbus_connection_signal_subscribe (
-				g_dbus_proxy_get_connection (wk_editor->priv->web_extension_proxy),
-				g_dbus_proxy_get_name (wk_editor->priv->web_extension_proxy),
-				E_WEBKIT_EDITOR_WEB_EXTENSION_INTERFACE,
-				"ContentChanged",
-				E_WEBKIT_EDITOR_WEB_EXTENSION_OBJECT_PATH,
-				NULL,
-				G_DBUS_SIGNAL_FLAGS_NONE,
-				(GDBusSignalCallback) web_extension_content_changed_cb,
-				wk_editor,
-				NULL);
 
 		wk_editor->priv->web_extension_user_changed_default_colors_cb_id =
 			g_dbus_connection_signal_subscribe (
@@ -751,53 +818,6 @@ webkit_editor_remove_element_attribute (EWebKitEditor *wk_editor,
 
 	e_web_extension_container_call_simple (wk_editor->priv->container, page_id, wk_editor->priv->stamp,
 		"ElementRemoveAttributeBySelector", g_variant_new ("(tss)", page_id, selector, attribute));
-}
-
-static void
-webkit_editor_set_format_boolean (EWebKitEditor *wk_editor,
-                                  const gchar *format_dom_function,
-                                  gboolean format_value)
-{
-	guint64 page_id;
-
-	page_id = current_page_id (wk_editor);
-
-	e_web_extension_container_call_simple (wk_editor->priv->container, page_id, wk_editor->priv->stamp,
-		format_dom_function, g_variant_new ("(tb)", page_id, format_value));
-}
-
-static void
-webkit_editor_set_format_int (EWebKitEditor *wk_editor,
-                              const gchar *format_dom_function,
-                              gint32 format_value)
-{
-	guint64 page_id;
-
-	page_id = current_page_id (wk_editor);
-
-	e_web_extension_container_call_simple (wk_editor->priv->container, page_id, wk_editor->priv->stamp,
-		format_dom_function, g_variant_new ("(ti)", page_id, format_value));
-}
-
-static void
-webkit_editor_set_format_string (EWebKitEditor *wk_editor,
-                                 const gchar *format_name,
-                                 const gchar *format_dom_function,
-                                 const gchar *format_value)
-{
-	guint64 page_id;
-
-	if (!wk_editor->priv->html_mode)
-		return;
-
-	webkit_editor_set_changed (wk_editor, TRUE);
-
-	page_id = current_page_id (wk_editor);
-
-	e_web_extension_container_call_simple (wk_editor->priv->container, page_id, wk_editor->priv->stamp,
-		format_dom_function, g_variant_new ("(ts)", page_id, format_value));
-
-	g_object_notify (G_OBJECT (wk_editor), format_name);
 }
 
 static void
@@ -1361,200 +1381,116 @@ webkit_editor_update_styles (EContentEditor *editor)
 }
 
 static void
+webkit_editor_set_body_color_attribute (EContentEditor *editor,
+					const gchar *attr_name,
+					const GdkRGBA *value)
+{
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
+
+	if (value && value->alpha > 1e-9) {
+		gchar color[64];
+
+		g_snprintf (color, 63, "#%06x", e_rgba_to_value (value));
+
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetBodyAttribute(%s, %s);",
+			attr_name,
+			color);
+	} else {
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetBodyAttribute(%s, null);",
+			attr_name);
+	}
+}
+
+static void
 webkit_editor_page_set_text_color (EContentEditor *editor,
                                    const GdkRGBA *value)
 {
-	EWebKitEditor *wk_editor;
-	gchar *color;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
-
-	webkit_editor_set_element_attribute (wk_editor, "body", "text", color);
-
-	g_free (color);
+	webkit_editor_set_body_color_attribute (editor, "text", value);
 }
 
 static void
 webkit_editor_page_get_text_color (EContentEditor *editor,
                                    GdkRGBA *color)
 {
-	EWebKitEditor *wk_editor;
-	GVariant *result;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->html_mode)
-		goto theme;
-
-	result = webkit_editor_get_element_attribute (wk_editor, "body", "text");
-	if (result) {
-		const gchar *value;
-
-		g_variant_get (result, "(&s)", &value);
-		if (!value || !*value || !gdk_rgba_parse (color, value)) {
-			g_variant_unref (result);
-			goto theme;
-		}
-		g_variant_unref (result);
-		return;
+	if (wk_editor->priv->html_mode &&
+	    wk_editor->priv->body_fg_color) {
+		*color = *wk_editor->priv->body_fg_color;
+	} else {
+		e_utils_get_theme_color (GTK_WIDGET (wk_editor), "theme_text_color", E_UTILS_DEFAULT_THEME_TEXT_COLOR, color);
 	}
-
- theme:
-	e_utils_get_theme_color (
-		GTK_WIDGET (wk_editor),
-		"theme_text_color",
-		E_UTILS_DEFAULT_THEME_TEXT_COLOR,
-		color);
 }
 
 static void
 webkit_editor_page_set_background_color (EContentEditor *editor,
                                          const GdkRGBA *value)
 {
-	EWebKitEditor *wk_editor;
-	gchar *color;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (value->alpha != 0.0)
-		color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
-	else
-		color = g_strdup ("");
-
-	webkit_editor_set_element_attribute (wk_editor, "body", "bgcolor", color);
-
-	g_free (color);
+	webkit_editor_set_body_color_attribute (editor, "bgcolor", value);
 }
 
 static void
 webkit_editor_page_get_background_color (EContentEditor *editor,
                                          GdkRGBA *color)
 {
-	EWebKitEditor *wk_editor;
-	GVariant *result;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->html_mode)
-		goto theme;
-
-	result = webkit_editor_get_element_attribute (wk_editor, "body", "bgcolor");
-	if (result) {
-		const gchar *value;
-
-		g_variant_get (result, "(&s)", &value);
-		if (!value || !*value || !gdk_rgba_parse (color, value)) {
-			g_variant_unref (result);
-			goto theme;
-		}
-		g_variant_unref (result);
-		return;
+	if (wk_editor->priv->html_mode &&
+	    wk_editor->priv->body_bg_color) {
+		*color = *wk_editor->priv->body_bg_color;
+	} else {
+		e_utils_get_theme_color (GTK_WIDGET (wk_editor), "theme_base_color", E_UTILS_DEFAULT_THEME_BASE_COLOR, color);
 	}
-
- theme:
-	e_utils_get_theme_color (
-		GTK_WIDGET (wk_editor),
-		"theme_base_color",
-		E_UTILS_DEFAULT_THEME_BASE_COLOR,
-		color);
 }
 
 static void
 webkit_editor_page_set_link_color (EContentEditor *editor,
                                    const GdkRGBA *value)
 {
-	EWebKitEditor *wk_editor;
-	gchar *color;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
-
-	webkit_editor_set_element_attribute (wk_editor, "body", "link", color);
-
-	g_free (color);
+	webkit_editor_set_body_color_attribute (editor, "link", value);
 }
 
 static void
 webkit_editor_page_get_link_color (EContentEditor *editor,
                                    GdkRGBA *color)
 {
-	EWebKitEditor *wk_editor;
-	GVariant *result;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->html_mode)
-		goto theme;
-
-	result = webkit_editor_get_element_attribute (wk_editor, "body", "link");
-	if (result) {
-		const gchar *value;
-
-		g_variant_get (result, "(&s)", &value);
-		if (!value || !*value || !gdk_rgba_parse (color, value)) {
-			g_variant_unref (result);
-			goto theme;
-		}
-		g_variant_unref (result);
-		return;
+	if (wk_editor->priv->html_mode &&
+	    wk_editor->priv->body_link_color) {
+		*color = *wk_editor->priv->body_link_color;
+	} else {
+		color->alpha = 1;
+		color->red = 0;
+		color->green = 0;
+		color->blue = 1;
 	}
-
- theme:
-	color->alpha = 1;
-	color->red = 0;
-	color->green = 0;
-	color->blue = 1;
 }
 
 static void
 webkit_editor_page_set_visited_link_color (EContentEditor *editor,
                                            const GdkRGBA *value)
 {
-	EWebKitEditor *wk_editor;
-	gchar *color;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
-
-	webkit_editor_set_element_attribute (wk_editor, "body", "vlink", color);
-
-	g_free (color);
+	webkit_editor_set_body_color_attribute (editor, "vlink", value);
 }
 
 static void
 webkit_editor_page_get_visited_link_color (EContentEditor *editor,
                                            GdkRGBA *color)
 {
-	EWebKitEditor *wk_editor;
-	GVariant *result;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->html_mode)
-		goto theme;
-
-	result = webkit_editor_get_element_attribute (wk_editor, "body", "vlink");
-	if (result) {
-		const gchar *value;
-
-		g_variant_get (result, "(&s)", &value);
-		if (!value || !*value || !gdk_rgba_parse (color, value)) {
-			g_variant_unref (result);
-			goto theme;
-		}
-		g_variant_unref (result);
-		return;
+	if (wk_editor->priv->html_mode &&
+	    wk_editor->priv->body_vlink_color) {
+		*color = *wk_editor->priv->body_vlink_color;
+	} else {
+		color->alpha = 1;
+		color->red = 1;
+		color->green = 0;
+		color->blue = 0;
 	}
-
- theme:
-	color->alpha = 1;
-	color->red = 1;
-	color->green = 0;
-	color->blue = 0;
 }
 
 static void
@@ -2222,8 +2158,8 @@ webkit_editor_selection_indent (EContentEditor *editor)
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "DOMSelectionIndent");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.Indent(+1);");
 }
 
 static void
@@ -2233,8 +2169,8 @@ webkit_editor_selection_unindent (EContentEditor *editor)
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "DOMSelectionUnindent");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.Indent(-1);");
 }
 
 static void
@@ -3820,21 +3756,16 @@ webkit_editor_set_background_color (EWebKitEditor *wk_editor,
 
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	if (gdk_rgba_equal (value, wk_editor->priv->background_color))
+	if ((!value && !wk_editor->priv->background_color) ||
+	    (value && wk_editor->priv->background_color && gdk_rgba_equal (value, wk_editor->priv->background_color)))
 		return;
 
-	color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
+	if (value)
+		color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
+	else
+		color = NULL;
 
-	if (wk_editor->priv->background_color)
-		gdk_rgba_free (wk_editor->priv->background_color);
-
-	wk_editor->priv->background_color = gdk_rgba_copy (value);
-
-	webkit_editor_set_format_string (
-		wk_editor,
-		"background-color",
-		"DOMSelectionSetBackgroundColor",
-		color);
+	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "BackColor", color ? color : "");
 
 	g_free (color);
 }
@@ -3844,12 +3775,7 @@ webkit_editor_get_background_color (EWebKitEditor *wk_editor)
 {
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), NULL);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		g_warning ("EHTMLEditorWebExtension not ready at %s!", G_STRFUNC);
-		return NULL;
-	}
-
-	if (!wk_editor->priv->html_mode || !wk_editor->priv->background_color)
+	if (!wk_editor->priv->background_color)
 		return &white;
 
 	return wk_editor->priv->background_color;
@@ -3861,10 +3787,7 @@ webkit_editor_set_font_name (EWebKitEditor *wk_editor,
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	wk_editor->priv->font_name = g_strdup (value);
-
-	webkit_editor_set_format_string (
-		wk_editor, "font-name", "DOMSelectionSetFontName", value);
+	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontName", value);
 }
 
 static const gchar *
@@ -3883,21 +3806,16 @@ webkit_editor_set_font_color (EWebKitEditor *wk_editor,
 
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	if (gdk_rgba_equal (value, wk_editor->priv->font_color))
+	if ((!value && !wk_editor->priv->font_color) ||
+	    (value && wk_editor->priv->font_color && gdk_rgba_equal (value, wk_editor->priv->font_color)))
 		return;
 
-	color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
+	if (value)
+		color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
+	else
+		color = NULL;
 
-	if (wk_editor->priv->font_color)
-		gdk_rgba_free (wk_editor->priv->font_color);
-
-	wk_editor->priv->font_color = gdk_rgba_copy (value);
-
-	webkit_editor_set_format_string (
-		wk_editor,
-		"font-color",
-		"DOMSelectionSetFontColor",
-		color);
+	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "ForeColor", color ? color : "");
 
 	g_free (color);
 }
@@ -3906,11 +3824,6 @@ static const GdkRGBA *
 webkit_editor_get_font_color (EWebKitEditor *wk_editor)
 {
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), NULL);
-
-	if (!wk_editor->priv->web_extension_proxy) {
-		g_warning ("EHTMLEditorWebExtension not ready at %s!", G_STRFUNC);
-		return NULL;
-	}
 
 	if (!wk_editor->priv->html_mode || !wk_editor->priv->font_color)
 		return &black;
@@ -3922,15 +3835,21 @@ static void
 webkit_editor_set_font_size (EWebKitEditor *wk_editor,
                              gint value)
 {
+	gchar sz[2] = { 0, 0 };
+
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
 	if (wk_editor->priv->font_size == value)
 		return;
 
-	wk_editor->priv->font_size = value;
+	if (value >= 1 && value <= 7) {
+		sz[0] = '0' + value;
+	} else {
+		g_warn_if_reached ();
+		return;
+	}
 
-	webkit_editor_set_format_int (
-		wk_editor, "DOMSelectionSetFontSize", value);
+	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontSize", sz);
 }
 
 static gint
@@ -3944,17 +3863,38 @@ webkit_editor_get_font_size (EWebKitEditor *wk_editor)
 static void
 webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 			      EContentEditorStyleFlags flag,
-			      gboolean do_set,
-			      const gchar *dom_function_name)
+			      gboolean do_set)
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
 	if (((wk_editor->priv->style_flags & flag) != 0 ? 1 : 0) == (do_set ? 1 : 0))
 		return;
 
-	wk_editor->priv->style_flags = (wk_editor->priv->style_flags & ~flag) | (do_set ? flag : 0);
-
-	webkit_editor_set_format_boolean (wk_editor, dom_function_name, do_set);
+	switch (flag) {
+	case E_CONTENT_EDITOR_STYLE_NONE:
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_BOLD:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Bold");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_ITALIC:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Italic");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_UNDERLINE:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Underline");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Strikethrough");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_MONOSPACE:
+		webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontName", "monospace");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Subscript");
+		break;
+	case E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT:
+		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Superscript");
+		break;
+	}
 }
 
 static gboolean
@@ -5234,9 +5174,15 @@ webkit_editor_constructed (GObject *object)
 
 	manager = webkit_web_view_get_user_content_manager (WEBKIT_WEB_VIEW (wk_editor));
 
+	g_signal_connect_object (manager, "script-message-received::contentChanged",
+		G_CALLBACK (content_changed_cb), wk_editor, 0);
+	g_signal_connect_object (manager, "script-message-received::formattingChanged",
+		G_CALLBACK (formatting_changed_cb), wk_editor, 0);
 	g_signal_connect_object (manager, "script-message-received::undoRedoStateChanged",
 		G_CALLBACK (undu_redo_state_changed_cb), wk_editor, 0);
 
+	webkit_user_content_manager_register_script_message_handler (manager, "contentChanged");
+	webkit_user_content_manager_register_script_message_handler (manager, "formattingChanged");
 	webkit_user_content_manager_register_script_message_handler (manager, "undoRedoStateChanged");
 
 	/* Give spell check languages to WebKit */
@@ -5400,15 +5346,12 @@ webkit_editor_finalize (GObject *object)
 		priv->post_reload_operations = NULL;
 	}
 
-	if (priv->background_color != NULL) {
-		gdk_rgba_free (priv->background_color);
-		priv->background_color = NULL;
-	}
-
-	if (priv->font_color != NULL) {
-		gdk_rgba_free (priv->font_color);
-		priv->font_color = NULL;
-	}
+	g_clear_pointer (&priv->background_color, gdk_rgba_free);
+	g_clear_pointer (&priv->font_color, gdk_rgba_free);
+	g_clear_pointer (&priv->body_fg_color, gdk_rgba_free);
+	g_clear_pointer (&priv->body_bg_color, gdk_rgba_free);
+	g_clear_pointer (&priv->body_link_color, gdk_rgba_free);
+	g_clear_pointer (&priv->body_vlink_color, gdk_rgba_free);
 
 	g_free (priv->last_hover_uri);
 	priv->last_hover_uri = NULL;
@@ -5464,8 +5407,7 @@ webkit_editor_set_property (GObject *object,
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_BOLD,
-				g_value_get_boolean (value),
-				"DOMSelectionSetBold");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_FONT_COLOR:
@@ -5496,48 +5438,42 @@ webkit_editor_set_property (GObject *object,
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_ITALIC,
-				g_value_get_boolean (value),
-				"DOMSelectionSetItalic");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_MONOSPACED:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_MONOSPACE,
-				g_value_get_boolean (value),
-				"DOMSelectionSetMonospaced");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_STRIKETHROUGH:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH,
-				g_value_get_boolean (value),
-				"DOMSelectionSetStrikethrough");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_SUBSCRIPT:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT,
-				g_value_get_boolean (value),
-				"DOMSelectionSetSubscript");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_SUPERSCRIPT:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT,
-				g_value_get_boolean (value),
-				"DOMSelectionSetSuperscript");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_UNDERLINE:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_CONTENT_EDITOR_STYLE_IS_UNDERLINE,
-				g_value_get_boolean (value),
-				"DOMSelectionSetUnderline");
+				g_value_get_boolean (value));
 			return;
 
 		case PROP_START_BOTTOM:
@@ -6640,8 +6576,6 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 	wk_editor->priv->start_bottom = E_THREE_STATE_INCONSISTENT;
 	wk_editor->priv->top_signature = E_THREE_STATE_INCONSISTENT;
 
-	wk_editor->priv->web_extension_selection_changed_cb_id = 0;
-	wk_editor->priv->web_extension_content_changed_cb_id = 0;
 	wk_editor->priv->web_extension_user_changed_default_colors_cb_id = 0;
 }
 

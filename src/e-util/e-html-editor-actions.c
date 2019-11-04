@@ -606,7 +606,8 @@ action_mode_cb (GtkRadioAction *action,
 	action_group = editor->priv->html_context_actions;
 	gtk_action_group_set_visible (action_group, is_html);
 
-	gtk_widget_set_sensitive (editor->priv->color_combo_box, is_html);
+	gtk_widget_set_sensitive (editor->priv->fg_color_combo_box, is_html);
+	gtk_widget_set_sensitive (editor->priv->bg_color_combo_box, is_html);
 
 	if (is_html) {
 		gtk_widget_show (editor->priv->html_toolbar);
@@ -1133,6 +1134,13 @@ static GtkRadioActionEntry core_justify_entries[] = {
 	  N_("Center Alignment"),
 	  E_CONTENT_EDITOR_ALIGNMENT_CENTER },
 
+	{ "justify-fill",
+	  "format-justify-fill",
+	  N_("_Justified"),
+	  "<Control>j",
+	  N_("Align Justified"),
+	  E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY },
+
 	{ "justify-left",
 	  "format-justify-left",
 	  N_("_Left"),
@@ -1397,6 +1405,22 @@ static GtkToggleActionEntry html_toggle_entries[] = {
 	  N_("_Strikethrough"),
 	  NULL,
 	  N_("Strikethrough"),
+	  NULL,
+	  FALSE },
+
+	{ "subscript",
+	  NULL,
+	  N_("Subs_cript"),
+	  "<Control><Shift>b",
+	  N_("Subscript"),
+	  NULL,
+	  FALSE },
+
+	{ "superscript",
+	  NULL,
+	  N_("Su_perscript"),
+	  "<Control><Shift>p",
+	  N_("Superscript"),
 	  NULL,
 	  FALSE },
 
@@ -2161,6 +2185,14 @@ editor_actions_bind (EHTMLEditor *editor)
 	e_binding_bind_property (
 		cnt_editor, "strikethrough",
 		ACTION (STRIKETHROUGH), "active",
+		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+	e_binding_bind_property (
+		cnt_editor, "subscript",
+		ACTION (SUBSCRIPT), "active",
+		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+	e_binding_bind_property (
+		cnt_editor, "superscript",
+		ACTION (SUPERSCRIPT), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 	e_binding_bind_property (
 		cnt_editor, "underline",

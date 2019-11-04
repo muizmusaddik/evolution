@@ -59,6 +59,9 @@
         <menuitem action='italic'/>
         <menuitem action='underline'/>
         <menuitem action='strikethrough'/>
+        <separator/>
+        <menuitem action='subscript'/>
+        <menuitem action='superscript'/>
       </menu>
       <menu action='font-size-menu'>
         <menuitem action='size-minus-two'/>
@@ -91,6 +94,7 @@
         <menuitem action='justify-left'/>
         <menuitem action='justify-center'/>
         <menuitem action='justify-right'/>
+        <menuitem action='justify-fill'/>
       </menu>
       <separator/>
       <menuitem action='indent'/>
@@ -117,6 +121,7 @@
     <toolitem action='justify-left'/>
     <toolitem action='justify-center'/>
     <toolitem action='justify-right'/>
+    <toolitem action='justify-fill'/>
     <separator/>
     <toolitem action='unindent'/>
     <toolitem action='indent'/>

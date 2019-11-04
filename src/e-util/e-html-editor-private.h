@@ -77,7 +77,8 @@ struct _EHTMLEditorPrivate {
 	GtkWidget *cell_dialog;
 	GtkWidget *spell_check_dialog;
 
-	GtkWidget *color_combo_box;
+	GtkWidget *fg_color_combo_box;
+	GtkWidget *bg_color_combo_box;
 	GtkWidget *mode_combo_box;
 	GtkWidget *size_combo_box;
 	GtkWidget *style_combo_box;

@@ -2520,7 +2520,7 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 
 	jsc_context = webkit_frame_get_js_context (frame);
 
-	/* Read in order as each other uses the previous */
+	/* Read in order approximately as each other uses the previous */
 	load_javascript_file (jsc_context, "e-convert.js");
 	load_javascript_file (jsc_context, "e-selection.js");
 	load_javascript_file (jsc_context, "e-undo-redo.js");

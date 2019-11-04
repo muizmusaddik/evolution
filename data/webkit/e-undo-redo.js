@@ -385,6 +385,7 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 EvoUndoRedo.input_cb = function(inputEvent)
 {
 	if (EvoUndoRedo.disabled) {
+		EvoEditor.EmitContentChanged();
 		return;
 	}
 
@@ -399,6 +400,9 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	    !EvoUndoRedo.stack.topInsertTextAtSamePlace()) {
 		EvoUndoRedo.stack.maybeMergeInsertText(true);
 	}
+
+	EvoEditor.maybeUpdateFormattingState(opType.startsWith("format"));
+	EvoEditor.EmitContentChanged();
 }
 
 EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
@@ -620,16 +624,24 @@ EvoUndoRedo.Undo = function()
 {
 	var record = EvoUndoRedo.stack.undo();
 
+	if (!record)
+		return;
+
 	EvoUndoRedo.applyRecord(record, true, true);
 	EvoEditor.maybeUpdateFormattingState(true);
+	EvoEditor.EmitContentChanged();
 }
 
 EvoUndoRedo.Redo = function()
 {
 	var record = EvoUndoRedo.stack.redo();
 
+	if (!record)
+		return;
+
 	EvoUndoRedo.applyRecord(record, false, true);
 	EvoEditor.maybeUpdateFormattingState(true);
+	EvoEditor.EmitContentChanged();
 }
 
 EvoUndoRedo.Clear = function()
