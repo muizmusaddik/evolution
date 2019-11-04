@@ -843,8 +843,10 @@ EvoEditor.SetBlockFormat = function(format)
 
 	traversar.selectionBaseNode = document.getSelection().baseNode;
 	traversar.selectionBaseOffset = document.getSelection().baseOffset;
-	traversar.selectionExtentNode = document.getSelection().extentNode;
-	traversar.selectionExtentOffset = document.getSelection().extentOffset;
+	if (!document.getSelection().isCollapsed) {
+		traversar.selectionExtentNode = document.getSelection().extentNode;
+		traversar.selectionExtentOffset = document.getSelection().extentOffset;
+	}
 
 	try {
 		EvoEditor.ForeachChildInAffectedContent(affected, traversar);

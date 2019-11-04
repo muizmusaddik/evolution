@@ -116,7 +116,7 @@ EvoSelection.GetTextOffsetNode = function(element, textOffset)
 		}
 	}
 
-	return node ? node : adept;
+	return node ? node : (adept ? adept : element);
 }
 
 /* Returns an object, where the current selection in the doc is stored */
