@@ -621,6 +621,7 @@ EvoUndoRedo.Undo = function()
 	var record = EvoUndoRedo.stack.undo();
 
 	EvoUndoRedo.applyRecord(record, true, true);
+	EvoEditor.maybeUpdateFormattingState(true);
 }
 
 EvoUndoRedo.Redo = function()
@@ -628,6 +629,7 @@ EvoUndoRedo.Redo = function()
 	var record = EvoUndoRedo.stack.redo();
 
 	EvoUndoRedo.applyRecord(record, false, true);
+	EvoEditor.maybeUpdateFormattingState(true);
 }
 
 EvoUndoRedo.Clear = function()

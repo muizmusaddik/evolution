@@ -47,6 +47,8 @@ var EvoEditor = {
 	CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
 	CLAIM_CONTENT_FLAG_SAVE_HTML : 1 << 1,
 
+	TEXT_INDENT_SIZE : 3, /* in characters */
+
 	htmlFormat : false,
 	storedSelection : null,
 	formattingState : {
@@ -140,15 +142,6 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		nchanges++;
 	}
 
-	tmp = computedStyle ? computedStyle.textIndent : "";
-	tmp = parseInt(tmp);
-	value = Number.isInteger(tmp) && tmp > 0;
-	if (value != EvoEditor.formattingState.indented) {
-		EvoEditor.formattingState.indented = value;
-		changes["indented"] = value;
-		nchanges++;
-	}
-
 	tmp = (computedStyle ? computedStyle.textAlign : "").toLowerCase();
 	if (tmp == "")
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
@@ -173,6 +166,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		script : 0,
 		blockFormat : null,
 		fontSize : null,
+		indented : null
 	};
 
 	for (parent = baseElem; parent && !(parent == document.body) &&
@@ -223,6 +217,29 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 				obj.fontSize = value;
 			}
 		}
+
+		if (obj.indented == null) {
+			tmp = parent.style.textIndent;
+			if (tmp && tmp.endsWith("ch")) {
+				tmp = parseInt(tmp.slice(0, -2));
+			} else {
+				/* for backward compatibility */
+				tmp = parent.style.marginLeft;
+				if (tmp && tmp.endsWith("ch")) {
+					tmp = parseInt(tmp.slice(0, -2));
+				} else {
+					tmp = parent.style.marginRight;
+					if (tmp && tmp.endsWith("ch")) {
+						tmp = parseInt(tmp.slice(0, -2));
+					} else {
+						tmp = "";
+					}
+				}
+			}
+			if (Number.isInteger(tmp)) {
+				obj.indented = tmp > 0;
+			}
+		}
 	}
 
 	value = obj.script;
@@ -243,6 +260,13 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	if (value != EvoEditor.formattingState.fontSize) {
 		EvoEditor.formattingState.fontSize = value;
 		changes["fontSize"] = value;
+		nchanges++;
+	}
+
+	value = obj.indented == null ? false : obj.indented;
+	if (value != EvoEditor.formattingState.indented) {
+		EvoEditor.formattingState.indented = value;
+		changes["indented"] = value;
 		nchanges++;
 	}
 
@@ -587,6 +611,7 @@ EvoEditor.SetAlignment = function(alignment)
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment");
+		EvoEditor.maybeUpdateFormattingState(true);
 	}
 }
 
@@ -868,6 +893,124 @@ EvoEditor.SetBlockFormat = function(format)
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat");
+		EvoEditor.maybeUpdateFormattingState(true);
+	}
+}
+
+EvoEditor.applyIndent = function(record, isUndo)
+{
+	if (record.changes) {
+		var ii, parent, child;
+
+		parent = EvoSelection.FindElementByPath(document.body, record.path);
+		if (!parent) {
+			throw "EvoEditor.applyIndent: Cannot find parent at path " + record.path;
+		}
+
+		for (ii = 0; ii < record.changes.length; ii++) {
+			var change = record.changes[ii];
+
+			child = EvoSelection.FindElementByPath(parent, change.path);
+			if (!child) {
+				throw "EvoEditor.applyIndent: Cannot find child";
+			}
+
+			if (isUndo) {
+				child.style.marginLeft = change.beforeMarginLeft;
+				child.style.marginRight = change.beforeMarginRight;
+				child.style.textIndent = change.beforeTextIndent;
+			} else {
+				child.style.marginLeft = change.afterMarginLeft;
+				child.style.marginRight = change.afterMarginRight;
+				child.style.textIndent = change.afterTextIndent;
+			}
+		}
+	}
+}
+
+EvoEditor.Indent = function(increment)
+{
+	var traversar = {
+		record : null,
+		increment : increment,
+
+		flat : false,
+		onlyBlockElements : true,
+
+		exec : function(parent, element) {
+			var change = null;
+
+			if (traversar.record) {
+				if (!traversar.record.changes)
+					traversar.record.changes = [];
+
+				change = {};
+				change.path = EvoSelection.GetChildPath(parent, element);
+				change.beforeMarginLeft = element.style.marginLeft;
+				change.beforeMarginRight = element.style.marginRight;
+				change.beforeTextIndent = element.style.textIndent;
+
+				traversar.record.changes[traversar.record.changes.length] = change;
+			}
+
+			var currValue = null;
+
+			/* margin is used only for backward compatibility */
+			if (element.style.textIndent.endsWith("ch")) {
+				currValue = element.style.textIndent;
+
+				if (element.style.marginLeft.endsWith("ch"))
+					element.style.marginLeft = "";
+				if (element.style.marginRight.endsWith("ch"))
+					element.style.marginRight = "";
+			} else if (element.style.marginLeft.endsWith("ch")) {
+				currValue = element.style.marginLeft;
+				element.style.marginLeft = "";
+			} else if (element.style.marginRight.endsWith("ch")) {
+				currValue = element.style.marginRight;
+				element.style.marginRight = "";
+			}
+
+			if (!currValue) {
+				currValue = 0;
+			} else {
+				currValue = parseInt(currValue.slice(0, -2));
+				if (!Number.isInteger(currValue))
+					currValue = 0;
+			}
+
+			if (traversar.increment) {
+				element.style.textIndent = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
+			} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
+				element.style.textIndent = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
+			} else if (currValue > 0) {
+				element.style.textIndent = "";
+			}
+
+			if (change) {
+				change.afterMarginLeft = element.style.marginLeft;
+				change.afterMarginRight = element.style.marginRight;
+				change.afterTextIndent = element.style.textIndent;
+			}
+
+			return true;
+		}
+	};
+
+	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+
+	traversar.record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+
+	try {
+		EvoEditor.ForeachChildInAffectedContent(affected, traversar);
+
+		if (traversar.record) {
+			traversar.record.applyIncrement = increment;
+			traversar.record.apply = EvoEditor.applyIndent;
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent");
+		EvoEditor.maybeUpdateFormattingState(true);
 	}
 }
 
