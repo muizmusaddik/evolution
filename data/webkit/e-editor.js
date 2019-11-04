@@ -1014,6 +1014,17 @@ EvoEditor.Indent = function(increment)
 	}
 }
 
+EvoEditor.InsertHTML = function(opType, html)
+{
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType, null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		document.execCommand("insertHTML", false, html);
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType);
+		EvoEditor.maybeUpdateFormattingState(true);
+	}
+}
+
 document.onload = function() {
 	/* Make sure there is a selection */
 	if (!document.getSelection().baseNode) {
