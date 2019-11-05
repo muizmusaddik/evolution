@@ -26,22 +26,9 @@ set(extra_deps
 	evolution-mail
 )
 set(sources
-	e-composer-dom-functions.c
-	e-composer-dom-functions.h
-	e-dialogs-dom-functions.c
-	e-dialogs-dom-functions.h
-	e-dom-utils.c
-	e-dom-utils.h
-	e-editor-dom-functions.c
-	e-editor-dom-functions.h
-	e-editor-page.c
-	e-editor-page.h
-	e-editor-undo-redo-manager.c
-	e-editor-undo-redo-manager.h
 	e-editor-web-extension.c
 	e-editor-web-extension.h
 	e-editor-web-extension-main.c
-	e-editor-web-extension-names.h
 )
 set(extra_defines
 	-DEVOLUTION_WEBKITDATADIR=\"${webkitdatadir}\"
