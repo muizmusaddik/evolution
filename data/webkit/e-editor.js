@@ -518,7 +518,10 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 	affected.restChildrenCount = commonParent.children.length - ii;
 
 	if (withHtml) {
-		affected.html = html;
+		if (firstChildIndex == -1)
+			affected.html = commonParent.innerHTML;
+		else
+			affected.html = html;
 	}
 
 	return affected;

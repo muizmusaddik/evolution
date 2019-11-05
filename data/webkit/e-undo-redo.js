@@ -463,7 +463,7 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 			first = record.firstChildIndex;
 
 			// it can equal to the children.length, when the node had been removed
-			if (first < 0 || first > commonParent.children.length) {
+			if (first < -1 || first > commonParent.children.length) {
 				throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
 			}
 
@@ -473,29 +473,37 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 					commonParent.children.length + " first:" + first + " last:" + last + ")";
 			}
 
-			for (ii = last - 1; ii >= first; ii--) {
-				if (ii >= 0 && ii < commonParent.children.length) {
-					commonParent.removeChild(commonParent.children.item(ii));
-				}
-			}
-
-			var tmpNode = document.createElement("evo-tmp");
-
-			if (isUndo) {
-				tmpNode.innerHTML = record.htmlBefore;
-			} else {
-				tmpNode.innerHTML = record.htmlAfter;
-			}
-
-			if (first < commonParent.children.length) {
-				first = commonParent.children.item(first);
-
-				while(tmpNode.firstElementChild) {
-					commonParent.insertBefore(tmpNode.firstElementChild, first);
+			if (first == -1) {
+				if (isUndo) {
+					commonParent.innerHTML = record.htmlBefore;
+				} else {
+					commonParent.innerHTML = record.htmlAfter;
 				}
 			} else {
-				while(tmpNode.children.length) {
-					commonParent.appendChild(tmpNode.children.item(0));
+				for (ii = last - 1; ii >= first; ii--) {
+					if (ii >= 0 && ii < commonParent.children.length) {
+						commonParent.removeChild(commonParent.children.item(ii));
+					}
+				}
+
+				var tmpNode = document.createElement("evo-tmp");
+
+				if (isUndo) {
+					tmpNode.innerHTML = record.htmlBefore;
+				} else {
+					tmpNode.innerHTML = record.htmlAfter;
+				}
+
+				if (first < commonParent.children.length) {
+					first = commonParent.children.item(first);
+
+					while(tmpNode.firstElementChild) {
+						commonParent.insertBefore(tmpNode.firstElementChild, first);
+					}
+				} else {
+					while(tmpNode.children.length) {
+						commonParent.appendChild(tmpNode.children.item(0));
+					}
 				}
 			}
 		}
@@ -582,7 +590,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 		first = record.firstChildIndex;
 
 		// it can equal to the children.length, when the node had been removed
-		if (first < 0 || first > commonParent.children.length) {
+		if (first < -1 || first > commonParent.children.length) {
 			throw "EvoUndoRedo::StopRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
 		}
 
@@ -592,9 +600,13 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 				commonParent.children.length + " first:" + first + " last:" + last + ")";
 		}
 
-		for (ii = first; ii < last; ii++) {
-			if (ii >= 0 && ii < commonParent.children.length) {
-				html += commonParent.children.item(ii).outerHTML;
+		if (first == -1) {
+			html = commonParent.innerHTML;
+		} else {
+			for (ii = first; ii < last; ii++) {
+				if (ii >= 0 && ii < commonParent.children.length) {
+					html += commonParent.children.item(ii).outerHTML;
+				}
 			}
 		}
 
