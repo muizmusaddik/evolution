@@ -1116,11 +1116,26 @@ EvoEditor.SetBodyAttribute = function(name, value)
 	}
 }
 
-document.onload = function() {
-	/* Make sure there is a selection */
-	if (!document.getSelection().baseNode) {
-		document.getSelection.setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
+EvoEditor.initializeContent = function()
+{
+	if (document.body) {
+		if (!document.body.firstChild) {
+			EvoUndoRedo.Disable();
+			try {
+				document.body.innerHTML = "<div><br></div>";
+			} finally {
+				EvoUndoRedo.Enable();
+			}
+		}
+
+		/* Make sure there is a selection */
+		if (!document.getSelection().baseNode) {
+			document.getSelection().setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
+		}
 	}
 }
 
+document.onload = EvoEditor.initializeContent;
 document.onselectionchange = function() { EvoEditor.maybeUpdateFormattingState(false); };
+
+EvoEditor.initializeContent();
