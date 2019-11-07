@@ -253,23 +253,24 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		}
 
 		if (obj.indented == null) {
-			tmp = parent.style.textIndent;
-			if (tmp && tmp.endsWith("ch")) {
-				tmp = parseInt(tmp.slice(0, -2));
-			} else {
-				/* for backward compatibility */
+			var dir = window.getComputedStyle(parent).direction;
+
+			if (dir == "rtl") {
+				tmp = parent.style.marginRight;
+				if (tmp && tmp.endsWith("ch")) {
+					tmp = parseInt(tmp.slice(0, -2));
+				} else {
+					tmp = "";
+				}
+			} else { // "ltr" or other
 				tmp = parent.style.marginLeft;
 				if (tmp && tmp.endsWith("ch")) {
 					tmp = parseInt(tmp.slice(0, -2));
 				} else {
-					tmp = parent.style.marginRight;
-					if (tmp && tmp.endsWith("ch")) {
-						tmp = parseInt(tmp.slice(0, -2));
-					} else {
-						tmp = "";
-					}
+					tmp = "";
 				}
 			}
+
 			if (Number.isInteger(tmp)) {
 				obj.indented = tmp > 0;
 			}
@@ -967,11 +968,9 @@ EvoEditor.applyIndent = function(record, isUndo)
 			if (isUndo) {
 				child.style.marginLeft = change.beforeMarginLeft;
 				child.style.marginRight = change.beforeMarginRight;
-				child.style.textIndent = change.beforeTextIndent;
 			} else {
 				child.style.marginLeft = change.afterMarginLeft;
 				child.style.marginRight = change.afterMarginRight;
-				child.style.textIndent = change.afterTextIndent;
 			}
 		}
 	}
@@ -997,27 +996,20 @@ EvoEditor.Indent = function(increment)
 				change.path = EvoSelection.GetChildPath(parent, element);
 				change.beforeMarginLeft = element.style.marginLeft;
 				change.beforeMarginRight = element.style.marginRight;
-				change.beforeTextIndent = element.style.textIndent;
 
 				traversar.record.changes[traversar.record.changes.length] = change;
 			}
 
-			var currValue = null;
+			var currValue = null, dir;
 
-			/* margin is used only for backward compatibility */
-			if (element.style.textIndent.endsWith("ch")) {
-				currValue = element.style.textIndent;
+			dir = window.getComputedStyle(element).direction;
 
-				if (element.style.marginLeft.endsWith("ch"))
-					element.style.marginLeft = "";
+			if (dir == "rtl") {
 				if (element.style.marginRight.endsWith("ch"))
-					element.style.marginRight = "";
-			} else if (element.style.marginLeft.endsWith("ch")) {
-				currValue = element.style.marginLeft;
-				element.style.marginLeft = "";
-			} else if (element.style.marginRight.endsWith("ch")) {
-				currValue = element.style.marginRight;
-				element.style.marginRight = "";
+					currValue = element.style.marginRight;
+			} else { // "ltr" or other
+				if (element.style.marginLeft.endsWith("ch"))
+					currValue = element.style.marginLeft;
 			}
 
 			if (!currValue) {
@@ -1029,17 +1021,22 @@ EvoEditor.Indent = function(increment)
 			}
 
 			if (traversar.increment) {
-				element.style.textIndent = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
+				currValue = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
 			} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
-				element.style.textIndent = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
+				currValue = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
 			} else if (currValue > 0) {
-				element.style.textIndent = "";
+				currValue = "";
+			}
+
+			if (dir == "rtl") {
+				element.style.marginRight = currValue;
+			} else { // "ltr" or other
+				element.style.marginLeft = currValue;
 			}
 
 			if (change) {
 				change.afterMarginLeft = element.style.marginLeft;
 				change.afterMarginRight = element.style.marginRight;
-				change.afterTextIndent = element.style.textIndent;
 			}
 
 			return true;
