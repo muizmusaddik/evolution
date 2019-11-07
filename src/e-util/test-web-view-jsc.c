@@ -1929,6 +1929,8 @@ main (gint argc,
 	g_test_init (&argc, &argv, NULL);
 	g_test_bug_base ("https://gitlab.gnome.org/GNOME/evolution/issues/");
 
+	g_setenv ("E_WEB_VIEW_TEST_SOURCES", "1", FALSE);
+
 	gtk_init (&argc, &argv);
 
 	e_util_init_main_thread (NULL);

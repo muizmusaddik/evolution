@@ -571,6 +571,8 @@ main (gint argc,
 	e_util_init_main_thread (NULL);
 	e_passwords_init ();
 
+	g_setenv ("E_HTML_EDITOR_TEST_SOURCES", "1", FALSE);
+
 	modules = e_module_load_all_in_directory (EVOLUTION_MODULEDIR);
 	g_list_free_full (modules, (GDestroyNotify) g_type_module_unuse);
 

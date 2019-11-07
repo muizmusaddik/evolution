@@ -32,6 +32,7 @@ set(sources
 )
 set(extra_defines
 	-DEVOLUTION_WEBKITDATADIR=\"${webkitdatadir}\"
+	-DEVOLUTION_SOURCE_WEBKITDATADIR=\"${CMAKE_SOURCE_DIR}/data/webkit\"
 )
 
 set(extra_cflags)

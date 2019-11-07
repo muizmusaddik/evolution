@@ -2767,6 +2767,7 @@ main (gint argc,
 	   user settings when playing with them. */
 	g_setenv ("GIO_EXTRA_MODULES", EVOLUTION_TESTGIOMODULESDIR, TRUE);
 	g_setenv ("GSETTINGS_BACKEND", TEST_KEYFILE_SETTINGS_BACKEND_NAME, TRUE);
+	g_setenv ("E_HTML_EDITOR_TEST_SOURCES", "1", FALSE);
 	g_setenv (TEST_KEYFILE_SETTINGS_FILENAME_ENVVAR, test_keyfile_filename, TRUE);
 
 	g_test_init (&argc, &argv, NULL);
