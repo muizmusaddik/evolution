@@ -141,13 +141,6 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		nchanges++;
 	}
 
-	value = computedStyle ? computedStyle.backgroundColor : "";
-	if (value != EvoEditor.formattingState.bgColor) {
-		EvoEditor.formattingState.bgColor = value;
-		changes["bgColor"] = value;
-		nchanges++;
-	}
-
 	tmp = (computedStyle ? computedStyle.textAlign : "").toLowerCase();
 	if (tmp == "")
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
@@ -200,11 +193,12 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		script : 0,
 		blockFormat : null,
 		fontSize : null,
-		indented : null
+		indented : null,
+		bgColor : null
 	};
 
-	for (parent = baseElem; parent && !(parent == document.body) &&
-	     obj.script == 0 && obj.blockFormat == null && obj.fontSize == null && obj.indented == null;
+	for (parent = baseElem; parent && !(parent == document.body) && (
+	     obj.script == 0 || obj.blockFormat == null || obj.fontSize == null || obj.indented == null ||obj.bgColor == null);
 	     parent = parent.parentElement) {
 		if (obj.script == 0) {
 			if (parent.tagName == "SUB")
@@ -275,6 +269,10 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 				obj.indented = tmp > 0;
 			}
 		}
+
+		if (obj.bgColor == null && parent.style.backgroundColor != "") {
+			obj.bgColor = parent.style.backgroundColor;
+		}
 	}
 
 	value = obj.script;
@@ -302,6 +300,13 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	if (value != EvoEditor.formattingState.indented) {
 		EvoEditor.formattingState.indented = value;
 		changes["indented"] = value;
+		nchanges++;
+	}
+
+	value = obj.bgColor ? obj.bgColor : computedStyle.backgroundColor;
+	if (value != EvoEditor.formattingState.bgColor) {
+		EvoEditor.formattingState.bgColor = value;
+		changes["bgColor"] = value;
 		nchanges++;
 	}
 
