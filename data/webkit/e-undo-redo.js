@@ -373,13 +373,18 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 		return;
 	}
 
-	var opType = inputEvent.inputType;
+	var opType = inputEvent.inputType, record;
 
 	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
 		opType += "::WordDelim";
 
-	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null,
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null,
 		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+
+	/* Changing format with collapsed selection doesn't change HTML structure immediately */
+	if (record && opType.startsWith("format") && document.getSelection().isCollapsed) {
+		record.ignore = true;
+	}
 }
 
 EvoUndoRedo.input_cb = function(inputEvent)
@@ -394,7 +399,9 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
 		opType += "::WordDelim";
 
-	EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType);
+	if (EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType)) {
+		EvoEditor.EmitContentChanged();
+	}
 
 	if (!EvoUndoRedo.ongoingRecordings.length && opType == "insertText" &&
 	    !EvoUndoRedo.stack.topInsertTextAtSamePlace()) {
@@ -402,7 +409,6 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	}
 
 	EvoEditor.maybeUpdateFormattingState(opType.startsWith("format"));
-	EvoEditor.EmitContentChanged();
 }
 
 EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
@@ -462,17 +468,6 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 
 			first = record.firstChildIndex;
 
-			// it can equal to the children.length, when the node had been removed
-			if (first < -1 || first > commonParent.children.length) {
-				throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
-			}
-
-			last = commonParent.children.length - record.restChildrenCount;
-			if (last < 0 || last < first) {
-				throw "EvoUndoRedo::applyRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
-					commonParent.children.length + " first:" + first + " last:" + last + ")";
-			}
-
 			if (first == -1) {
 				if (isUndo) {
 					commonParent.innerHTML = record.htmlBefore;
@@ -480,6 +475,17 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 					commonParent.innerHTML = record.htmlAfter;
 				}
 			} else {
+				// it can equal to the children.length, when the node had been removed
+				if (first < 0 || first > commonParent.children.length) {
+					throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
+				}
+
+				last = commonParent.children.length - record.restChildrenCount;
+				if (last < 0 || last < first) {
+					throw "EvoUndoRedo::applyRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+						commonParent.children.length + " first:" + first + " last:" + last + ")";
+				}
+
 				for (ii = last - 1; ii >= first; ii--) {
 					if (ii >= 0 && ii < commonParent.children.length) {
 						commonParent.removeChild(commonParent.children.item(ii));
@@ -555,7 +561,7 @@ EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode, flags)
 EvoUndoRedo.StopRecord = function(kind, opType)
 {
 	if (EvoUndoRedo.disabled) {
-		return;
+		return false;
 	}
 
 	if (!EvoUndoRedo.ongoingRecordings.length) {
@@ -574,7 +580,14 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 	EvoUndoRedo.ongoingRecordings.length = EvoUndoRedo.ongoingRecordings.length - 1;
 
-	record.selectionAfter = EvoSelection.Store(document);
+	if (record.ignore) {
+		if (!EvoUndoRedo.ongoingRecordings.length &&
+		    (record.kind != EvoUndoRedo.RECORD_KIND_EVENT || record.opType != "insertText")) {
+			EvoUndoRedo.stack.maybeMergeInsertText(true);
+		}
+
+		return false;
+	}
 
 	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
 		record.htmlAfter = document.documentElement.outerHTML;
@@ -589,20 +602,20 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 		first = record.firstChildIndex;
 
-		// it can equal to the children.length, when the node had been removed
-		if (first < -1 || first > commonParent.children.length) {
-			throw "EvoUndoRedo::StopRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
-		}
-
-		last = commonParent.children.length - record.restChildrenCount;
-		if (last < 0 || last < first) {
-			throw "EvoUndoRedo::StopRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
-				commonParent.children.length + " first:" + first + " last:" + last + ")";
-		}
-
 		if (first == -1) {
 			html = commonParent.innerHTML;
 		} else {
+			// it can equal to the children.length, when the node had been removed
+			if (first < 0 || first > commonParent.children.length) {
+				throw "EvoUndoRedo::StopRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
+			}
+
+			last = commonParent.children.length - record.restChildrenCount;
+			if (last < 0 || last < first) {
+				throw "EvoUndoRedo::StopRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+					commonParent.children.length + " first:" + first + " last:" + last + ")";
+			}
+
 			for (ii = first; ii < last; ii++) {
 				if (ii >= 0 && ii < commonParent.children.length) {
 					html += commonParent.children.item(ii).outerHTML;
@@ -610,8 +623,19 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 			}
 		}
 
+		// some formatting commands do not change HTML structure immediately, thus ignore those
+		if (kind == EvoUndoRedo.RECORD_KIND_EVENT && record.htmlBefore == html) {
+			if (!EvoUndoRedo.ongoingRecordings.length && record.opType != "insertText") {
+				EvoUndoRedo.stack.maybeMergeInsertText(true);
+			}
+
+			return false;
+		}
+
 		record.htmlAfter = html;
 	}
+
+	record.selectionAfter = EvoSelection.Store(document);
 
 	if (EvoUndoRedo.ongoingRecordings.length) {
 		var parentRecord = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
@@ -630,6 +654,8 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 			EvoUndoRedo.stack.maybeMergeInsertText(true);
 		}
 	}
+
+	return true;
 }
 
 EvoUndoRedo.Undo = function()
