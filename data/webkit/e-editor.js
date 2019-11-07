@@ -49,8 +49,13 @@ var EvoEditor = {
 
 	TEXT_INDENT_SIZE : 3, /* in characters */
 
+	FORCE_NO : 0,
+	FORCE_YES : 1,
+	FORCE_MAYBE : 2,
+
 	htmlFormat : false,
 	storedSelection : null,
+	forceFormatStateUpdate : false,
 	formattingState : {
 		baseElement : null, // to avoid often notifications when just moving within the same node
 		bold : false,
@@ -83,9 +88,11 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	if (baseElem && baseElem.nodeType == baseElem.TEXT_NODE)
 		baseElem = baseElem.parentElement;
 
-	if (!force && EvoEditor.formattingState.baseElement === baseElem) {
+	if (force == EvoEditor.FORCE_NO && EvoEditor.formattingState.baseElement === baseElem) {
 		return;
 	}
+
+	force = force == EvoEditor.FORCE_YES;
 
 	EvoEditor.formattingState.baseElement = baseElem;
 
@@ -103,7 +110,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	tmp = computedStyle ? computedStyle.fontStyle : "";
 
 	value = tmp == "italic" || tmp == "oblique";
-	if (value != EvoEditor.formattingState.italic) {
+	if (force || value != EvoEditor.formattingState.italic) {
 		EvoEditor.formattingState.italic = value;
 		changes["italic"] = value;
 		nchanges++;
@@ -112,21 +119,21 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	tmp = computedStyle ? computedStyle.webkitTextDecorationsInEffect : "";
 
 	value = tmp.search("underline") >= 0;
-	if (value != EvoEditor.formattingState.underline) {
+	if (force || value != EvoEditor.formattingState.underline) {
 		EvoEditor.formattingState.underline = value;
 		changes["underline"] = value;
 		nchanges++;
 	}
 
 	value = tmp.search("line-through") >= 0;
-	if (value != EvoEditor.formattingState.strikethrough) {
+	if (force || value != EvoEditor.formattingState.strikethrough) {
 		EvoEditor.formattingState.strikethrough = value;
 		changes["strikethrough"] = value;
 		nchanges++;
 	}
 
 	value = computedStyle ? computedStyle.fontFamily : "";
-	if (value != EvoEditor.formattingState.fontFamily) {
+	if (force || value != EvoEditor.formattingState.fontFamily) {
 		EvoEditor.formattingState.fontFamily = value;
 		changes["fontFamily"] = value;
 		nchanges++;
@@ -135,7 +142,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	value = computedStyle ? computedStyle.color : "";
 	if (value == "-webkit-standard")
 		value = "";
-	if (value != EvoEditor.formattingState.fgColor) {
+	if (force || value != EvoEditor.formattingState.fgColor) {
 		EvoEditor.formattingState.fgColor = value;
 		changes["fgColor"] = value;
 		nchanges++;
@@ -155,35 +162,35 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	else
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
 
-	if (value != EvoEditor.formattingState.alignment) {
+	if (force || value != EvoEditor.formattingState.alignment) {
 		EvoEditor.formattingState.alignment = value;
 		changes["alignment"] = value;
 		nchanges++;
 	}
 
 	value = document.body.text;
-	if (value != EvoEditor.formattingState.bodyFgColor) {
+	if (force || value != EvoEditor.formattingState.bodyFgColor) {
 		EvoEditor.formattingState.bodyFgColor = value;
 		changes["bodyFgColor"] = value;
 		nchanges++;
 	}
 
 	value = document.body.bgColor;
-	if (value != EvoEditor.formattingState.bodyBgColor) {
+	if (force || value != EvoEditor.formattingState.bodyBgColor) {
 		EvoEditor.formattingState.bodyBgColor = value;
 		changes["bodyBgColor"] = value;
 		nchanges++;
 	}
 
 	value = document.body.link;
-	if (value != EvoEditor.formattingState.bodyLinkColor) {
+	if (force || value != EvoEditor.formattingState.bodyLinkColor) {
 		EvoEditor.formattingState.bodyLinkColor = value;
 		changes["bodyLinkColor"] = value;
 		nchanges++;
 	}
 
 	value = document.body.vLink;
-	if (value != EvoEditor.formattingState.bodyVlinkColor) {
+	if (force || value != EvoEditor.formattingState.bodyVlinkColor) {
 		EvoEditor.formattingState.bodyVlinkColor = value;
 		changes["bodyVlinkColor"] = value;
 		nchanges++;
@@ -276,37 +283,42 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	}
 
 	value = obj.script;
-	if (value != EvoEditor.formattingState.script) {
+	if (force || value != EvoEditor.formattingState.script) {
 		EvoEditor.formattingState.script = value;
 		changes["script"] = value;
 		nchanges++;
 	}
 
 	value = obj.blockFormat == null ? EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH : obj.blockFormat;
-	if (value != EvoEditor.formattingState.blockFormat) {
+	if (force || value != EvoEditor.formattingState.blockFormat) {
 		EvoEditor.formattingState.blockFormat = value;
 		changes["blockFormat"] = value;
 		nchanges++;
 	}
 
 	value = obj.fontSize;
-	if (value != EvoEditor.formattingState.fontSize) {
+	if (force || value != EvoEditor.formattingState.fontSize) {
 		EvoEditor.formattingState.fontSize = value;
 		changes["fontSize"] = value;
 		nchanges++;
 	}
 
 	value = obj.indented == null ? false : obj.indented;
-	if (value != EvoEditor.formattingState.indented) {
+	if (force || value != EvoEditor.formattingState.indented) {
 		EvoEditor.formattingState.indented = value;
 		changes["indented"] = value;
 		nchanges++;
 	}
 
 	value = obj.bgColor ? obj.bgColor : computedStyle.backgroundColor;
-	if (value != EvoEditor.formattingState.bgColor) {
+	if (force || value != EvoEditor.formattingState.bgColor) {
 		EvoEditor.formattingState.bgColor = value;
 		changes["bgColor"] = value;
+		nchanges++;
+	}
+
+	if (force) {
+		changes["forced"] = true;
 		nchanges++;
 	}
 
@@ -665,7 +677,7 @@ EvoEditor.SetAlignment = function(alignment)
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setAlignment");
-		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 
 		if (traversar.anyChanged)
 			EvoEditor.EmitContentChanged();
@@ -950,7 +962,7 @@ EvoEditor.SetBlockFormat = function(format)
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat");
-		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
 	}
 }
@@ -1064,7 +1076,7 @@ EvoEditor.Indent = function(increment)
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent");
-		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
 	}
 }
@@ -1076,7 +1088,7 @@ EvoEditor.InsertHTML = function(opType, html)
 		document.execCommand("insertHTML", false, html);
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType);
-		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
 	}
 }
@@ -1116,7 +1128,7 @@ EvoEditor.SetBodyAttribute = function(name, value)
 			document.body.removeAttribute(name);
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyAttribute::" + name);
-		EvoEditor.maybeUpdateFormattingState(true);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
 	}
 }
@@ -1141,6 +1153,10 @@ EvoEditor.initializeContent = function()
 }
 
 document.onload = EvoEditor.initializeContent;
-document.onselectionchange = function() { EvoEditor.maybeUpdateFormattingState(false); };
+
+document.onselectionchange = function() {
+	EvoEditor.maybeUpdateFormattingState(EvoEditor.forceFormatStateUpdate ? EvoEditor.FORCE_YES : EvoEditor.FORCE_MAYBE);
+	EvoEditor.forceFormatStateUpdate = false;
+};
 
 EvoEditor.initializeContent();

@@ -151,8 +151,18 @@ struct _EWebKitEditorPrivate {
 };
 
 static const GdkRGBA black = { 0, 0, 0, 1 };
-static const GdkRGBA white = { 1, 1, 1, 1 };
 static const GdkRGBA transparent = { 0, 0, 0, 0 };
+
+typedef enum {
+	E_WEBKIT_EDITOR_STYLE_NONE		= 0,
+	E_WEBKIT_EDITOR_STYLE_IS_BOLD		= 1 << 0,
+	E_WEBKIT_EDITOR_STYLE_IS_ITALIC	= 1 << 1,
+	E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE	= 1 << 2,
+	E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH	= 1 << 3,
+	E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE	= 1 << 4,
+	E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT	= 1 << 5,
+	E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT	= 1 << 6
+} EWebKitEditorStyleFlags;
 
 typedef void (*PostReloadOperationFunc) (EWebKitEditor *wk_editor, gpointer data, EContentEditorInsertContentFlags flags);
 
@@ -409,7 +419,7 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 	EWebKitEditor *wk_editor = user_data;
 	JSCValue *jsc_params, *jsc_value;
 	GObject *object;
-	guint32 style_flags;
+	gboolean changed, forced = FALSE;
 
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
@@ -441,109 +451,148 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 
 	g_object_freeze_notify (object);
 
+	jsc_value = jsc_value_object_get_property (jsc_params, "forced");
+	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
+		forced = jsc_value_to_boolean (jsc_value);
+	}
+	g_clear_object (&jsc_value);
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "alignment");
 	if (jsc_value && jsc_value_is_number (jsc_value)) {
 		gint value = jsc_value_to_int32 (jsc_value);
 
 		if (value != wk_editor->priv->alignment) {
 			wk_editor->priv->alignment = value;
-			g_object_notify (object, "alignment");
+			changed = TRUE;
 		}
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (object, "alignment");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "blockFormat");
 	if (jsc_value && jsc_value_is_number (jsc_value)) {
 		gint value = jsc_value_to_int32 (jsc_value);
 
 		if (value != wk_editor->priv->block_format) {
 			wk_editor->priv->block_format = value;
-			g_object_notify (object, "block-format");
+			changed = TRUE;
 		}
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (object, "block-format");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "indented");
 	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
 		gboolean value = jsc_value_to_boolean (jsc_value);
 
 		if ((value ? 1: 0) != (wk_editor->priv->is_indented ? 1 : 0)) {
 			wk_editor->priv->is_indented = value;
-			g_object_notify (object, "indented");
+			changed = TRUE;
 		}
 	}
 	g_clear_object (&jsc_value);
 
-	style_flags = E_CONTENT_EDITOR_STYLE_NONE;
+	if (changed || forced)
+		g_object_notify (object, "indented");
 
+	#define update_style_flag(_flag, _set) \
+		changed = (wk_editor->priv->style_flags & (_flag)) != ((_set) ? (_flag) : 0); \
+		wk_editor->priv->style_flags = (wk_editor->priv->style_flags & ~(_flag)) | ((_set) ? (_flag) : 0);
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "bold");
 	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
 		gboolean value = jsc_value_to_boolean (jsc_value);
 
-		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_BOLD : 0);
-
-		g_object_notify (G_OBJECT (wk_editor), "bold");
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_BOLD, value);
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (G_OBJECT (wk_editor), "bold");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "italic");
 	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
 		gboolean value = jsc_value_to_boolean (jsc_value);
 
-		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_ITALIC : 0);
-
-		g_object_notify (G_OBJECT (wk_editor), "italic");
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_ITALIC, value);
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (G_OBJECT (wk_editor), "italic");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "underline");
 	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
 		gboolean value = jsc_value_to_boolean (jsc_value);
 
-		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_UNDERLINE : 0);
-
-		g_object_notify (G_OBJECT (wk_editor), "underline");
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE, value);
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (G_OBJECT (wk_editor), "underline");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "strikethrough");
 	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
 		gboolean value = jsc_value_to_boolean (jsc_value);
 
-		style_flags |= (value ? E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH : 0);
-
-		g_object_notify (G_OBJECT (wk_editor), "strikethrough");
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH, value);
 	}
 	g_clear_object (&jsc_value);
+
+	if (changed || forced)
+		g_object_notify (G_OBJECT (wk_editor), "strikethrough");
 
 	jsc_value = jsc_value_object_get_property (jsc_params, "script");
 	if (jsc_value && jsc_value_is_number (jsc_value)) {
 		gint value = jsc_value_to_int32 (jsc_value);
 
-		style_flags |= (value < 0 ? E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT : (value > 0 ? E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT : 0));
+		changed = FALSE;
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT, value < 0);
 
-		if ((wk_editor->priv->style_flags & E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT) != (style_flags & E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT))
+		if (changed || forced)
 			g_object_notify (object, "subscript");
 
-		if ((wk_editor->priv->style_flags & E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT) != (style_flags & E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT))
+		changed = FALSE;
+		update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT, value > 0);
+
+		if (changed || forced)
 			g_object_notify (object, "superscript");
+	} else if (forced) {
+		g_object_notify (object, "subscript");
+		g_object_notify (object, "superscript");
 	}
 	g_clear_object (&jsc_value);
 
-	if (wk_editor->priv->style_flags != style_flags)
-		wk_editor->priv->style_flags = style_flags;
+	#undef update_style_flag
 
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "fontSize");
 	if (jsc_value && jsc_value_is_number (jsc_value)) {
 		gint value = jsc_value_to_int32 (jsc_value);
 
 		if (value != wk_editor->priv->font_size) {
 			wk_editor->priv->font_size = value;
-			g_object_notify (object, "font-size");
+			changed = TRUE;
 		}
 	}
 	g_clear_object (&jsc_value);
 
+	if (changed || forced)
+		g_object_notify (object, "font-size");
+
+	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "fontFamily");
 	if (jsc_value && jsc_value_is_string (jsc_value)) {
 		gchar *value = jsc_value_to_string (jsc_value);
@@ -551,17 +600,20 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 		if (g_strcmp0 (value, wk_editor->priv->font_name) != 0) {
 			g_free (wk_editor->priv->font_name);
 			wk_editor->priv->font_name = value;
-			g_object_notify (object, "font-name");
+			changed = TRUE;
 		} else {
 			g_free (value);
 		}
 	}
 	g_clear_object (&jsc_value);
 
-	if (webkit_editor_update_color_value (jsc_params, "fgColor", &wk_editor->priv->font_color))
+	if (changed || forced)
+		g_object_notify (object, "font-name");
+
+	if (webkit_editor_update_color_value (jsc_params, "fgColor", &wk_editor->priv->font_color) || forced)
 		g_object_notify (object, "font-color");
 
-	if (webkit_editor_update_color_value (jsc_params, "bgColor", &wk_editor->priv->background_color))
+	if (webkit_editor_update_color_value (jsc_params, "bgColor", &wk_editor->priv->background_color) || forced)
 		g_object_notify (object, "background-color");
 
 	webkit_editor_update_color_value (jsc_params, "bodyFgColor", &wk_editor->priv->body_fg_color);
@@ -593,7 +645,6 @@ undu_redo_state_changed_cb (WebKitUserContentManager *manager,
 	state = jsc_value_to_int32 (jsc_value);
 	g_clear_object (&jsc_value);
 
-	printf ("%s: state:%x\n", __FUNCTION__, state);
 	webkit_editor_set_can_undo (wk_editor, (state & E_UNDO_REDO_STATE_CAN_UNDO) != 0);
 	webkit_editor_set_can_redo (wk_editor, (state & E_UNDO_REDO_STATE_CAN_REDO) != 0);
 }
@@ -1893,7 +1944,6 @@ webkit_editor_undo (EContentEditor *editor)
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	printf ("%s:\n", __FUNCTION__);
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 		"EvoUndoRedo.Undo();");
 }
@@ -1914,7 +1964,7 @@ webkit_editor_redo (EContentEditor *editor)
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
-	printf ("%s:\n", __FUNCTION__);
+
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 		"EvoUndoRedo.Redo();");
 }
@@ -3658,12 +3708,17 @@ webkit_editor_set_background_color (EWebKitEditor *wk_editor,
 	    (value && wk_editor->priv->background_color && gdk_rgba_equal (value, wk_editor->priv->background_color)))
 		return;
 
-	if (value)
+	if (value && value->alpha > 1e-9) {
 		color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
-	else
+		g_clear_pointer (&wk_editor->priv->background_color, gdk_rgba_free);
+		wk_editor->priv->background_color = gdk_rgba_copy (value);
+	} else {
 		color = NULL;
+		g_clear_pointer (&wk_editor->priv->background_color, gdk_rgba_free);
+		wk_editor->priv->background_color = NULL;
+	}
 
-	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "BackColor", color ? color : "");
+	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "BackColor", color ? color : "inherit");
 
 	g_free (color);
 }
@@ -3674,7 +3729,7 @@ webkit_editor_get_background_color (EWebKitEditor *wk_editor)
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), NULL);
 
 	if (!wk_editor->priv->background_color)
-		return &white;
+		return &transparent;
 
 	return wk_editor->priv->background_color;
 }
@@ -3760,7 +3815,7 @@ webkit_editor_get_font_size (EWebKitEditor *wk_editor)
 
 static void
 webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
-			      EContentEditorStyleFlags flag,
+			      EWebKitEditorStyleFlags flag,
 			      gboolean do_set)
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
@@ -3769,27 +3824,27 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 		return;
 
 	switch (flag) {
-	case E_CONTENT_EDITOR_STYLE_NONE:
+	case E_WEBKIT_EDITOR_STYLE_NONE:
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_BOLD:
+	case E_WEBKIT_EDITOR_STYLE_IS_BOLD:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Bold");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_ITALIC:
+	case E_WEBKIT_EDITOR_STYLE_IS_ITALIC:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Italic");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_UNDERLINE:
+	case E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Underline");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH:
+	case E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Strikethrough");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_MONOSPACE:
+	case E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE:
 		webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontName", "monospace");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT:
+	case E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Subscript");
 		break;
-	case E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT:
+	case E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Superscript");
 		break;
 	}
@@ -3797,7 +3852,7 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 
 static gboolean
 webkit_editor_get_style_flag (EWebKitEditor *wk_editor,
-			      EContentEditorStyleFlags flag)
+			      EWebKitEditorStyleFlags flag)
 {
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
 
@@ -4355,7 +4410,7 @@ webkit_editor_cell_set_background_color (EContentEditor *editor,
 		return;
 	}
 
-	if (value->alpha != 0.0)
+	if (value && value->alpha > 1e-9)
 		color = g_strdup_printf ("#%06x", e_rgba_to_value (value));
 	else
 		color = g_strdup ("");
@@ -5292,7 +5347,7 @@ webkit_editor_set_property (GObject *object,
 		case PROP_BOLD:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_BOLD,
+				E_WEBKIT_EDITOR_STYLE_IS_BOLD,
 				g_value_get_boolean (value));
 			return;
 
@@ -5323,42 +5378,42 @@ webkit_editor_set_property (GObject *object,
 		case PROP_ITALIC:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_ITALIC,
+				E_WEBKIT_EDITOR_STYLE_IS_ITALIC,
 				g_value_get_boolean (value));
 			return;
 
 		case PROP_MONOSPACED:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_MONOSPACE,
+				E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE,
 				g_value_get_boolean (value));
 			return;
 
 		case PROP_STRIKETHROUGH:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH,
+				E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH,
 				g_value_get_boolean (value));
 			return;
 
 		case PROP_SUBSCRIPT:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT,
+				E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT,
 				g_value_get_boolean (value));
 			return;
 
 		case PROP_SUPERSCRIPT:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT,
+				E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT,
 				g_value_get_boolean (value));
 			return;
 
 		case PROP_UNDERLINE:
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
-				E_CONTENT_EDITOR_STYLE_IS_UNDERLINE,
+				E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE,
 				g_value_get_boolean (value));
 			return;
 
@@ -5489,7 +5544,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_BOLD));
+					E_WEBKIT_EDITOR_STYLE_IS_BOLD));
 			return;
 
 		case PROP_FONT_COLOR:
@@ -5525,7 +5580,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_ITALIC));
+					E_WEBKIT_EDITOR_STYLE_IS_ITALIC));
 			return;
 
 		case PROP_MONOSPACED:
@@ -5533,7 +5588,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_MONOSPACE));
+					E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE));
 			return;
 
 		case PROP_STRIKETHROUGH:
@@ -5541,7 +5596,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_STRIKETHROUGH));
+					E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH));
 			return;
 
 		case PROP_SUBSCRIPT:
@@ -5549,7 +5604,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_SUBSCRIPT));
+					E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT));
 			return;
 
 		case PROP_SUPERSCRIPT:
@@ -5557,7 +5612,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_SUPERSCRIPT));
+					E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT));
 			return;
 
 		case PROP_UNDERLINE:
@@ -5565,7 +5620,7 @@ webkit_editor_get_property (GObject *object,
 				value,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
-					E_CONTENT_EDITOR_STYLE_IS_UNDERLINE));
+					E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE));
 			return;
 
 		case PROP_START_BOTTOM:
@@ -6455,8 +6510,8 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 	wk_editor->priv->current_user_stylesheet = NULL;
 	wk_editor->priv->suppress_color_changes = FALSE;
 
-	wk_editor->priv->font_color = gdk_rgba_copy (&black);
-	wk_editor->priv->background_color = gdk_rgba_copy (&white);
+	wk_editor->priv->font_color = NULL;
+	wk_editor->priv->background_color = NULL;
 	wk_editor->priv->font_name = NULL;
 	wk_editor->priv->font_size = E_CONTENT_EDITOR_FONT_SIZE_NORMAL;
 	wk_editor->priv->block_format = E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH;

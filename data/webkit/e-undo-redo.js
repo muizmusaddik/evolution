@@ -450,6 +450,8 @@ EvoUndoRedo.input_cb = function(inputEvent)
 
 	if (EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType)) {
 		EvoEditor.EmitContentChanged();
+
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 	}
 
 	if (!EvoUndoRedo.ongoingRecordings.length && opType == "insertText" &&
@@ -457,7 +459,7 @@ EvoUndoRedo.input_cb = function(inputEvent)
 		EvoUndoRedo.stack.maybeMergeInsertText(true);
 	}
 
-	EvoEditor.maybeUpdateFormattingState(opType.startsWith("format"));
+	EvoEditor.forceFormatStateUpdate = EvoEditor.forceFormatStateUpdate || opType == "" || opType.startsWith("format");
 }
 
 EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
@@ -715,7 +717,7 @@ EvoUndoRedo.Undo = function()
 		return;
 
 	EvoUndoRedo.applyRecord(record, true, true);
-	EvoEditor.maybeUpdateFormattingState(true);
+	EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_YES);
 	EvoEditor.EmitContentChanged();
 }
 
@@ -727,7 +729,7 @@ EvoUndoRedo.Redo = function()
 		return;
 
 	EvoUndoRedo.applyRecord(record, false, true);
-	EvoEditor.maybeUpdateFormattingState(true);
+	EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_YES);
 	EvoEditor.EmitContentChanged();
 }
 

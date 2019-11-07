@@ -657,6 +657,7 @@ html_editor_constructed (GObject *object)
 {
 	EHTMLEditor *editor = E_HTML_EDITOR (object);
 	EHTMLEditorPrivate *priv = editor->priv;
+	GdkRGBA transparent = { 0, 0, 0, 0 };
 	GtkWidget *widget;
 	GtkToolbar *toolbar;
 	GtkToolItem *tool_item;
@@ -773,6 +774,9 @@ html_editor_constructed (GObject *object)
 
 	tool_item = gtk_tool_item_new ();
 	widget = e_color_combo_new ();
+	e_color_combo_set_default_color (E_COLOR_COMBO (widget), &transparent);
+	e_color_combo_set_current_color (E_COLOR_COMBO (widget), &transparent);
+	e_color_combo_set_default_transparent (E_COLOR_COMBO (widget), TRUE);
 	gtk_container_add (GTK_CONTAINER (tool_item), widget);
 	gtk_widget_set_tooltip_text (widget, _("Background Color"));
 	gtk_toolbar_insert (toolbar, tool_item, 1);
