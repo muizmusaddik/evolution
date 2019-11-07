@@ -373,12 +373,61 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 		return;
 	}
 
-	var opType = inputEvent.inputType, record;
+	var opType = inputEvent.inputType, record, startNode = null, endNode = null;
 
 	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
 		opType += "::WordDelim";
 
-	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null,
+	if (opType == "deleteWordBackward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "backward", "word");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteWordForward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "forward", "word");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteSoftLineBackward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "backward", "line");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteSoftLineForward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "forward", "line");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteEntireSoftLine") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "backward", "line");
+		startNode = document.getSelection().baseNode;
+		document.getSelection().modify("move", "forward", "line");
+		endNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteHardLineBackward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "backward", "paragraph");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteHardLineForward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "forward", "paragraph");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteContentBackward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "backward", "paragraph");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	} else if (opType == "deleteContentForward") {
+		var sel = EvoSelection.Store(document);
+		document.getSelection().modify("move", "forward", "paragraph");
+		startNode = document.getSelection().baseNode;
+		EvoSelection.Restore(document, sel);
+	}
+
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, startNode, endNode,
 		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
 	/* Changing format with collapsed selection doesn't change HTML structure immediately */

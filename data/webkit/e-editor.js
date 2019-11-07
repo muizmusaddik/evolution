@@ -468,7 +468,10 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 	}
 
 	if (!endNode) {
-		endNode = startNode;
+		endNode = document.getSelection().extentNode;
+
+		if (!endNode)
+			endNode = startNode;
 	}
 
 	if ((flags & EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE) != 0) {
