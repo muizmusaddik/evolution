@@ -238,9 +238,11 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 			else if (parent.tagName == "OL") {
 				obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST;
 
-				if (parent.getAttribute("type").toUpperCase() == "I")
+				var typeAttr = parent.getAttribute("type");
+
+				if (typeAttr && typeAttr.toUpperCase() == "I")
 					obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN;
-				else if (parent.getAttribute("type").toUpperCase() == "I")
+				else if (typeAttr && typeAttr.toUpperCase() == "A")
 					obj.blockFormat = EvoEditor.E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA;
 			}
 		}
