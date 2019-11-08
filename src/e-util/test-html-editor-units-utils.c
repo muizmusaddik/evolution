@@ -566,16 +566,57 @@ test_utils_type_text (TestFixture *fixture,
 	return TRUE;
 }
 
+typedef struct _HTMLEqualData {
+	gpointer async_data;
+	gboolean equal;
+} HTMLEqualData;
+
+static void
+test_html_equal_done_cb (GObject *source_object,
+			 GAsyncResult *result,
+			 gpointer user_data)
+{
+	HTMLEqualData *hed = user_data;
+	WebKitJavascriptResult *js_result;
+	JSCException *exception;
+	JSCValue *js_value;
+	GError *error = NULL;
+
+	g_return_if_fail (hed != NULL);
+
+	js_result = webkit_web_view_run_javascript_finish (WEBKIT_WEB_VIEW (source_object), result, &error);
+
+	g_assert_no_error (error);
+	g_clear_error (&error);
+
+	g_assert_nonnull (js_result);
+
+	js_value = webkit_javascript_result_get_js_value (js_result);
+	g_assert_nonnull (js_value);
+	g_assert (jsc_value_is_boolean (js_value));
+
+	hed->equal = jsc_value_to_boolean (js_value);
+
+	exception = jsc_context_get_exception (jsc_value_get_context (js_value));
+
+	if (exception) {
+		g_warning ("Failed to call EvoEditorTest.isHTMLEqual: %s", jsc_exception_get_message (exception));
+		jsc_context_clear_exception (jsc_value_get_context (js_value));
+	}
+
+	webkit_javascript_result_unref (js_result);
+
+	test_utils_async_call_finish (hed->async_data);
+}
+
 gboolean
 test_utils_html_equal (TestFixture *fixture,
 		       const gchar *html1,
 		       const gchar *html2)
 {
 	EContentEditor *cnt_editor;
-	GDBusProxy *web_extension = NULL;
-	GVariant *result;
-	GError *error = NULL;
-	gboolean html_equal = FALSE;
+	gchar *script;
+	HTMLEqualData hed;
 
 	g_return_val_if_fail (fixture != NULL, FALSE);
 	g_return_val_if_fail (E_IS_HTML_EDITOR (fixture->editor), FALSE);
@@ -584,29 +625,33 @@ test_utils_html_equal (TestFixture *fixture,
 
 	cnt_editor = e_html_editor_get_content_editor (fixture->editor);
 	g_return_val_if_fail (cnt_editor != NULL, FALSE);
+	g_return_val_if_fail (WEBKIT_IS_WEB_VIEW (cnt_editor), FALSE);
 
-	g_object_get (cnt_editor, "web-extension", &web_extension, NULL);
+	script = e_web_view_jsc_printf_script (
+		"var EvoEditorTest = {};\n"
+		"EvoEditorTest.isHTMLEqual = function(html1, html2) {\n"
+		"	var elem1, elem2;\n"
+		"	elem1 = document.createElement(\"testHtmlEqual\");\n"
+		"	elem2 = document.createElement(\"testHtmlEqual\");\n"
+		"	elem1.innerHTML = html1.replace(\"&nbsp;\", \" \").replace(\" \", \" \");\n"
+		"	elem2.innerHTML = html2.replace(\"&nbsp;\", \" \").replace(\" \", \" \");\n"
+		"	elem1.normalize();\n"
+		"	elem2.normalize();\n"
+		"	return elem1.isEqualNode(elem2);\n"
+		"}\n"
+		"EvoEditorTest.isHTMLEqual(%s, %s);", html1, html2);
 
-	g_return_val_if_fail (G_IS_DBUS_PROXY (web_extension), FALSE);
+	hed.async_data = test_utils_async_call_prepare();
+	hed.equal = FALSE;
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_full (
-		web_extension,
-		"TestHTMLEqual",
-		g_variant_new ("(tss)", webkit_web_view_get_page_id (WEBKIT_WEB_VIEW (cnt_editor)), html1, html2),
-		G_DBUS_CALL_FLAGS_NONE,
-		-1,
-		NULL,
-		&error);
-	g_assert_no_error (error);
+	webkit_web_view_run_javascript (WEBKIT_WEB_VIEW (cnt_editor), script, NULL,
+		test_html_equal_done_cb, &hed);
 
-	g_clear_error (&error);
+	test_utils_async_call_wait (hed.async_data, 10);
 
-	g_return_val_if_fail (result != NULL, FALSE);
+	g_free (script);
 
-	g_variant_get (result, "(b)", &html_equal);
-	g_variant_unref (result);
-
-	return html_equal;
+	return hed.equal;
 }
 
 static gboolean
