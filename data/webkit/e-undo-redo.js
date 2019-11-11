@@ -228,7 +228,7 @@ var EvoUndoRedo = {
 				EvoUndoRedo.stack.pathMatches(curr.selectionBefore.baseElem, prev.selectionAfter.baseElem);
 		},
 
-		maybeMergeInsertText : function(skipFirst) {
+		maybeMergeConsecutive : function(skipFirst, opType) {
 			if (EvoUndoRedo.stack.current != EvoUndoRedo.stack.top ||
 			    EvoUndoRedo.stack.current == EvoUndoRedo.stack.bottom) {
 				return;
@@ -247,7 +247,7 @@ var EvoUndoRedo = {
 
 			if (!curr ||
 			    curr.kind != EvoUndoRedo.RECORD_KIND_EVENT ||
-			    curr.opType != "insertText" ||
+			    curr.opType != opType ||
 			    curr.selectionBefore.extentElem) {
 				return;
 			}
@@ -260,7 +260,7 @@ var EvoUndoRedo = {
 				prev = EvoUndoRedo.stack.array[ii];
 
 				if (prev.kind != EvoUndoRedo.RECORD_KIND_EVENT ||
-				    prev.opType != "insertText" ||
+				    prev.opType != opType ||
 				    prev.selectionBefore.extentElem ||
 				    curr.firstChildIndex != prev.firstChildIndex ||
 				    curr.restChildrenCount != prev.restChildrenCount ||
@@ -270,7 +270,8 @@ var EvoUndoRedo = {
 					break;
 				}
 
-				prev.opType = "insertText::merged";
+				if (opType == "insertText")
+					prev.opType = opType + "::merged";
 				prev.selectionAfter = curr.selectionAfter;
 				prev.htmlAfter = curr.htmlAfter;
 
@@ -285,6 +286,11 @@ var EvoUndoRedo = {
 			}
 
 			EvoUndoRedo.stack.maybeStateChanged();
+		},
+
+		maybeMergeInsertText : function(skipFirst) {
+			EvoUndoRedo.stack.maybeMergeConsecutive(skipFirst, "insertText");
+			EvoUndoRedo.stack.maybeMergeConsecutive(skipFirst, "insertText::WordDelim");
 		}
 	},
 
@@ -634,7 +640,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	if (record.ignore) {
 		if (!EvoUndoRedo.ongoingRecordings.length &&
 		    (record.kind != EvoUndoRedo.RECORD_KIND_EVENT || record.opType != "insertText")) {
-			EvoUndoRedo.stack.maybeMergeInsertText(true);
+			EvoUndoRedo.stack.maybeMergeInsertText(false);
 		}
 
 		return false;
@@ -677,7 +683,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 		// some formatting commands do not change HTML structure immediately, thus ignore those
 		if (kind == EvoUndoRedo.RECORD_KIND_EVENT && record.htmlBefore == html) {
 			if (!EvoUndoRedo.ongoingRecordings.length && record.opType != "insertText") {
-				EvoUndoRedo.stack.maybeMergeInsertText(true);
+				EvoUndoRedo.stack.maybeMergeInsertText(false);
 			}
 
 			return false;
@@ -701,7 +707,10 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	} else {
 		EvoUndoRedo.stack.push(record);
 
-		if (record.kind != EvoUndoRedo.RECORD_KIND_EVENT || record.opType != "insertText") {
+		if (record.kind == EvoUndoRedo.RECORD_KIND_EVENT && record.opType == "insertText::WordDelim") {
+			EvoUndoRedo.stack.maybeMergeConsecutive(true, "insertText");
+			EvoUndoRedo.stack.maybeMergeConsecutive(false, "insertText::WordDelim");
+		} else if (record.kind != EvoUndoRedo.RECORD_KIND_EVENT || record.opType != "insertText") {
 			EvoUndoRedo.stack.maybeMergeInsertText(true);
 		}
 	}
