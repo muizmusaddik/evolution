@@ -79,9 +79,26 @@ var EvoEditor = {
 
 EvoEditor.maybeUpdateFormattingState = function(force)
 {
-	var baseElem;
+	var baseElem = null;
 
-	baseElem = document.getSelection().baseNode;
+	if (!document.getSelection().isCollapsed) {
+		var commonParent;
+
+		commonParent = EvoEditor.GetCommonParent(document.getSelection().baseNode, document.getSelection().extentNode, true);
+		if (commonParent) {
+			var child1, child2;
+
+			child1 = EvoEditor.GetDirectChild(commonParent, document.getSelection().baseNode);
+			child2 = EvoEditor.GetDirectChild(commonParent, document.getSelection().extentNode);
+
+			if (child1 && (!child2 || (child2 && EvoEditor.GetChildIndex(commonParent, child1) <= EvoEditor.GetChildIndex(commonParent, child2)))) {
+				baseElem = document.getSelection().extentNode;
+			}
+		}
+	}
+
+	if (!baseElem)
+		baseElem = document.getSelection().baseNode;
 	if (!baseElem)
 		baseElem = document.body ? document.body.firstElementChild : null;
 
@@ -415,7 +432,7 @@ EvoEditor.ForeachChild = function(parent, firstChildIndex, lastChildIndex, trave
 	return EvoEditor.foreachChildRecur(parent, parent, firstChildIndex, lastChildIndex, traversar);
 }
 
-EvoEditor.GetCommonParent = function(firstNode, secondNode)
+EvoEditor.GetCommonParent = function(firstNode, secondNode, longPath)
 {
 	if (!firstNode || !secondNode) {
 		return null;
@@ -439,12 +456,12 @@ EvoEditor.GetCommonParent = function(firstNode, secondNode)
 
 	var commonParent, secondParent;
 
-	for (commonParent = firstNode.parentElement; commonParent; commonParent = commonParent.parentElement) {
+	for (commonParent = (longPath ? firstNode : firstNode.parentElement); commonParent; commonParent = commonParent.parentElement) {
 		if (commonParent === document.body) {
 			break;
 		}
 
-		for (secondParent = secondNode.parentElement; secondParent; secondParent = secondParent.parentElement) {
+		for (secondParent = (longPath ? secondNode : secondNode.parentElement); secondParent; secondParent = secondParent.parentElement) {
 			if (secondParent === document.body) {
 				break;
 			}
@@ -469,6 +486,21 @@ EvoEditor.GetDirectChild = function(parent, child)
 	}
 
 	return child;
+}
+
+EvoEditor.GetChildIndex = function(parent, child)
+{
+	if (!parent || !child)
+		return -1;
+
+	var ii;
+
+	for (ii = 0; ii < parent.children.length; ii++) {
+		if (child === parent.children.item(ii))
+			return ii;
+	}
+
+	return -1;
 }
 
 EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
@@ -503,7 +535,7 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 		}
 	}
 
-	commonParent = EvoEditor.GetCommonParent(startNode, endNode);
+	commonParent = EvoEditor.GetCommonParent(startNode, endNode, false);
 	startChild = EvoEditor.GetDirectChild(commonParent, startNode);
 	endChild = EvoEditor.GetDirectChild(commonParent, endNode);
 
