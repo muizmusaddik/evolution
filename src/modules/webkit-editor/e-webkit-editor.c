@@ -93,6 +93,7 @@ struct _EWebKitEditorPrivate {
 	gboolean suppress_color_changes;
 
 	guint32 style_flags;
+	guint32 temporary_style_flags; /* that's for collapsed selection, format changes only after something is typed */
 	gboolean is_indented;
 
 	GdkRGBA *background_color;
@@ -573,6 +574,8 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 		g_object_notify (object, "superscript");
 	}
 	g_clear_object (&jsc_value);
+
+	wk_editor->priv->temporary_style_flags = wk_editor->priv->style_flags;
 
 	#undef update_style_flag
 
@@ -3819,7 +3822,7 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	if (((wk_editor->priv->style_flags & flag) != 0 ? 1 : 0) == (do_set ? 1 : 0))
+	if (((wk_editor->priv->temporary_style_flags & flag) != 0 ? 1 : 0) == (do_set ? 1 : 0))
 		return;
 
 	switch (flag) {
@@ -3847,6 +3850,8 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Superscript");
 		break;
 	}
+
+	wk_editor->priv->temporary_style_flags = (wk_editor->priv->temporary_style_flags & (~flag)) | (do_set ? flag : 0);
 }
 
 static gboolean
