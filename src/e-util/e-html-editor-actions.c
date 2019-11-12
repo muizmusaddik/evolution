@@ -936,6 +936,95 @@ action_wrap_lines_cb (GtkAction *action,
 		e_content_editor_selection_wrap (cnt_editor);
 }
 
+/* This is when the user toggled the action */
+static void
+manage_format_subsuperscript_toggled (EHTMLEditor *editor,
+				      GtkToggleAction *changed_action,
+				      const gchar *prop_name,
+				      GtkToggleAction *second_action)
+{
+	EContentEditor *cnt_editor = e_html_editor_get_content_editor (editor);
+
+	g_signal_handlers_block_matched (cnt_editor, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_block_matched (changed_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_block_matched (second_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+
+	if (gtk_toggle_action_get_active (changed_action) &&
+	    gtk_toggle_action_get_active (second_action))
+		gtk_toggle_action_set_active (second_action, FALSE);
+
+	g_object_set (G_OBJECT (cnt_editor), prop_name, gtk_toggle_action_get_active (changed_action), NULL);
+
+	g_signal_handlers_unblock_matched (second_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_unblock_matched (changed_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_unblock_matched (cnt_editor, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+}
+
+/* This is when the content editor claimed change on the property */
+static void
+manage_format_subsuperscript_notify (EHTMLEditor *editor,
+				     GtkToggleAction *changed_action,
+				     const gchar *prop_name,
+				     GtkToggleAction *second_action)
+{
+	EContentEditor *cnt_editor = e_html_editor_get_content_editor (editor);
+	gboolean value = FALSE;
+
+	g_signal_handlers_block_matched (cnt_editor, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_block_matched (changed_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_block_matched (second_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+
+	g_object_get (G_OBJECT (cnt_editor), prop_name, &value, NULL);
+
+	gtk_toggle_action_set_active (changed_action, value);
+
+	if (gtk_toggle_action_get_active (changed_action) &&
+	    gtk_toggle_action_get_active (second_action))
+		gtk_toggle_action_set_active (second_action, FALSE);
+
+	g_signal_handlers_unblock_matched (second_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_unblock_matched (changed_action, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+	g_signal_handlers_unblock_matched (cnt_editor, G_SIGNAL_MATCH_DATA, 0, 0, NULL, NULL, editor);
+}
+
+static void
+html_editor_actions_subscript_toggled_cb (GtkToggleAction *action,
+					  EHTMLEditor *editor)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
+	manage_format_subsuperscript_toggled (editor, GTK_TOGGLE_ACTION (ACTION (SUBSCRIPT)), "subscript", GTK_TOGGLE_ACTION (ACTION (SUPERSCRIPT)));
+}
+
+static void
+html_editor_actions_notify_subscript_cb (EContentEditor *cnt_editor,
+					 GParamSpec *param,
+					 EHTMLEditor *editor)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
+	manage_format_subsuperscript_notify (editor, GTK_TOGGLE_ACTION (ACTION (SUBSCRIPT)), "subscript", GTK_TOGGLE_ACTION (ACTION (SUPERSCRIPT)));
+}
+
+static void
+html_editor_actions_superscript_toggled_cb (GtkToggleAction *action,
+					    EHTMLEditor *editor)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
+	manage_format_subsuperscript_toggled (editor, GTK_TOGGLE_ACTION (ACTION (SUPERSCRIPT)), "superscript", GTK_TOGGLE_ACTION (ACTION (SUBSCRIPT)));
+}
+
+static void
+html_editor_actions_notify_superscript_cb (EContentEditor *cnt_editor,
+					   GParamSpec *param,
+					   EHTMLEditor *editor)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
+	manage_format_subsuperscript_notify (editor, GTK_TOGGLE_ACTION (ACTION (SUPERSCRIPT)), "superscript", GTK_TOGGLE_ACTION (ACTION (SUBSCRIPT)));
+}
+
 /*****************************************************************************
  * Core Actions
  *
@@ -2187,17 +2276,19 @@ editor_actions_bind (EHTMLEditor *editor)
 		ACTION (STRIKETHROUGH), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 	e_binding_bind_property (
-		cnt_editor, "subscript",
-		ACTION (SUBSCRIPT), "active",
-		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-	e_binding_bind_property (
-		cnt_editor, "superscript",
-		ACTION (SUPERSCRIPT), "active",
-		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-	e_binding_bind_property (
 		cnt_editor, "underline",
 		ACTION (UNDERLINE), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+
+	/* Cannot use binding, due to subscript and superscript being mutually exclusive */
+	g_signal_connect_object (ACTION (SUBSCRIPT), "toggled",
+		G_CALLBACK (html_editor_actions_subscript_toggled_cb), editor, 0);
+	g_signal_connect_object (cnt_editor, "notify::subscript",
+		G_CALLBACK (html_editor_actions_notify_subscript_cb), editor, 0);
+	g_signal_connect_object (ACTION (SUPERSCRIPT), "toggled",
+		G_CALLBACK (html_editor_actions_superscript_toggled_cb), editor, 0);
+	g_signal_connect_object (cnt_editor, "notify::superscript",
+		G_CALLBACK (html_editor_actions_notify_superscript_cb), editor, 0);
 
 	e_binding_bind_property (
 		cnt_editor, "html-mode",

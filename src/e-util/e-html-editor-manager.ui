@@ -60,8 +60,8 @@
         <menuitem action='underline'/>
         <menuitem action='strikethrough'/>
         <separator/>
-        <menuitem action='subscript'/>
         <menuitem action='superscript'/>
+        <menuitem action='subscript'/>
       </menu>
       <menu action='font-size-menu'>
         <menuitem action='size-minus-two'/>

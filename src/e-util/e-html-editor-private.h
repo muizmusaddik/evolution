@@ -95,8 +95,6 @@ struct _EHTMLEditorPrivate {
 	guint recent_spell_languages_merge_id;
 
 	gint editor_layout_row;
-
-	gboolean is_testing;
 };
 
 void		editor_actions_init		(EHTMLEditor *editor);
