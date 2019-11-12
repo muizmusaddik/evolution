@@ -47,16 +47,20 @@ var EvoEditor = {
 	CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
 	CLAIM_CONTENT_FLAG_SAVE_HTML : 1 << 1,
 
-	TEXT_INDENT_SIZE : 3, /* in characters */
+	TEXT_INDENT_SIZE : 3, // in characters
 
 	FORCE_NO : 0,
 	FORCE_YES : 1,
 	FORCE_MAYBE : 2,
 
-	htmlFormat : false,
+	MODE_PLAIN_TEXT : 0,
+	MODE_HTML : 1,
+
+	mode : 1, // one of the MODE constants
 	storedSelection : null,
 	forceFormatStateUpdate : false,
 	formattingState : {
+		mode : -1,
 		baseElement : null, // to avoid often notifications when just moving within the same node
 		bold : false,
 		italic : false,
@@ -105,7 +109,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	if (baseElem && baseElem.nodeType == baseElem.TEXT_NODE)
 		baseElem = baseElem.parentElement;
 
-	if (force == EvoEditor.FORCE_NO && EvoEditor.formattingState.baseElement === baseElem) {
+	if (force == EvoEditor.FORCE_NO && EvoEditor.formattingState.baseElement === baseElem && EvoEditor.mode == EvoEditor.formattingState.mode) {
 		return;
 	}
 
@@ -114,6 +118,13 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	EvoEditor.formattingState.baseElement = baseElem;
 
 	var changes = {}, nchanges = 0, value, tmp, computedStyle;
+
+	value = EvoEditor.mode;
+	if (value != EvoEditor.formattingState.mode) {
+		EvoEditor.formattingState.mode = value;
+		changes["mode"] = value;
+		nchanges++;
+	}
 
 	computedStyle = baseElem ? window.getComputedStyle(baseElem) : null;
 
@@ -1182,6 +1193,42 @@ EvoEditor.initializeContent = function()
 		/* Make sure there is a selection */
 		if (!document.getSelection().baseNode) {
 			document.getSelection().setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
+		}
+	}
+}
+
+EvoEditor.SetMode = function(mode)
+{
+	if (EvoEditor.mode != mode) {
+		var opType = "setMode::" + (mode == EvoEditor.MODE_PLAIN_TEXT ? "PlainText" : "HTML"), record;
+
+		record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_DOCUMENT, opType, null, null);
+
+		if (record) {
+			record.modeBefore = EvoEditor.mode;
+			record.modeAfter = mode;
+			record.apply = function(record, isUndo) {
+				var useMode = isUndo ? record.modeBefore : record.modeAfter;
+
+				if (EvoEditor.mode != useMode) {
+					EvoEditor.mode = useMode;
+				}
+			}
+		}
+
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_DOCUMENT, opType);
+
+		EvoUndoRedo.Disable();
+		try {
+			EvoEditor.mode = mode;
+
+			if (mode == EvoEditor.MODE_PLAIN_TEXT) {
+				// TODO convert HTML to "rich" plain-text
+			} else {
+				// TODO convert plain to HTML
+			}
+		} finally {
+			EvoUndoRedo.Enable();
 		}
 	}
 }

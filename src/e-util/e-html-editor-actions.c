@@ -584,17 +584,20 @@ update_mode_combobox (gpointer data)
 }
 
 static void
-action_mode_cb (GtkRadioAction *action,
-                GtkRadioAction *current,
-                EHTMLEditor *editor)
+html_editor_actions_notify_html_mode_cb (EContentEditor *cnt_editor,
+					 GParamSpec *param,
+					 EHTMLEditor *editor)
 {
-	EContentEditor *cnt_editor;
 	GtkActionGroup *action_group;
 	GtkWidget *style_combo_box;
 	gboolean is_html;
 
-	cnt_editor = e_html_editor_get_content_editor (editor);
+	g_return_if_fail (E_IS_CONTENT_EDITOR (cnt_editor));
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
 	is_html = e_content_editor_get_html_mode (cnt_editor);
+
+	g_object_set (G_OBJECT (editor->priv->html_actions), "sensitive", is_html, NULL);
 
 	/* This must be done from idle callback, because apparently we can change
 	 * current value in callback of current value change */
@@ -634,6 +637,15 @@ action_mode_cb (GtkRadioAction *action,
 	/* Hide them from the action combo box as well */
 	style_combo_box = e_html_editor_get_style_combo_box (editor);
 	e_action_combo_box_update_model (E_ACTION_COMBO_BOX (style_combo_box));
+}
+
+static void
+action_mode_cb (GtkRadioAction *action,
+		GtkRadioAction *current,
+		EHTMLEditor *editor)
+{
+	/* Nothing to do here, wait for notification of
+	   a property change from the EContentEditor */
 }
 
 static void
@@ -1024,6 +1036,7 @@ html_editor_actions_notify_superscript_cb (EContentEditor *cnt_editor,
 
 	manage_format_subsuperscript_notify (editor, GTK_TOGGLE_ACTION (ACTION (SUPERSCRIPT)), "superscript", GTK_TOGGLE_ACTION (ACTION (SUBSCRIPT)));
 }
+
 
 /*****************************************************************************
  * Core Actions
@@ -2290,10 +2303,8 @@ editor_actions_bind (EHTMLEditor *editor)
 	g_signal_connect_object (cnt_editor, "notify::superscript",
 		G_CALLBACK (html_editor_actions_notify_superscript_cb), editor, 0);
 
-	e_binding_bind_property (
-		cnt_editor, "html-mode",
-		editor->priv->html_actions, "sensitive",
-		G_BINDING_SYNC_CREATE);
+	g_signal_connect_object (cnt_editor, "notify::html-mode",
+		G_CALLBACK (html_editor_actions_notify_html_mode_cb), editor, 0);
 
 	/* Disable all actions and toolbars when editor is not editable */
 	e_binding_bind_property (

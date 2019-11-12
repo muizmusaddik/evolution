@@ -509,9 +509,13 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 	try {
 		if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
 			if (isUndo) {
-				document.documentElement.outerHTML = record.htmlBefore;
+				document.documentElement.innerHTML = record.htmlBefore;
 			} else {
-				document.documentElement.outerHTML = record.htmlAfter;
+				document.documentElement.innerHTML = record.htmlAfter;
+			}
+
+			if (record.apply != null) {
+				record.apply(record, isUndo);
 			}
 		} else if (kind == EvoUndoRedo.RECORD_KIND_CUSTOM && record.apply != null) {
 			record.apply(record, isUndo);
@@ -596,7 +600,7 @@ EvoUndoRedo.StartRecord = function(kind, opType, startNode, endNode, flags)
 	record.selectionBefore = EvoSelection.Store(document);
 
 	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
-		record.htmlBefore = document.documentElement.outerHTML;
+		record.htmlBefore = document.documentElement.innerHTML;
 	} else if (kind != EvoUndoRedo.RECORD_KIND_GROUP) {
 		var affected;
 
@@ -647,7 +651,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	}
 
 	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
-		record.htmlAfter = document.documentElement.outerHTML;
+		record.htmlAfter = document.documentElement.innerHTML;
 	} else if (record.htmlBefore != window.undefined) {
 		var commonParent, first, last, ii, html = "";
 

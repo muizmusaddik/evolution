@@ -411,6 +411,9 @@ webkit_editor_update_color_value (JSCValue *jsc_params,
 	return res;
 }
 
+static void webkit_editor_update_styles (EContentEditor *editor);
+static void webkit_editor_style_updated_cb (EWebKitEditor *wk_editor);
+
 static void
 formatting_changed_cb (WebKitUserContentManager *manager,
 		       WebKitJavascriptResult *js_result,
@@ -456,6 +459,26 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 		forced = jsc_value_to_boolean (jsc_value);
 	}
 	g_clear_object (&jsc_value);
+
+	changed = FALSE;
+	jsc_value = jsc_value_object_get_property (jsc_params, "mode");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
+
+		if ((value ? 1 : 0) != (wk_editor->priv->html_mode ? 1 : 0)) {
+			wk_editor->priv->html_mode = value;
+			changed = TRUE;
+		}
+	}
+	g_clear_object (&jsc_value);
+
+	if (changed) {
+		/* Update fonts - in plain text we only want monospaced */
+		webkit_editor_update_styles (E_CONTENT_EDITOR (wk_editor));
+		webkit_editor_style_updated_cb (wk_editor);
+
+		g_object_notify (object, "html-mode");
+	}
 
 	changed = FALSE;
 	jsc_value = jsc_value_object_get_property (jsc_params, "alignment");
@@ -1576,52 +1599,18 @@ static void
 webkit_editor_set_html_mode (EWebKitEditor *wk_editor,
                              gboolean html_mode)
 {
-	gboolean convert = FALSE;
-	GVariant *result;
-
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
-
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
 
 	if (html_mode == wk_editor->priv->html_mode)
 		return;
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMCheckIfConversionNeeded",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
-
-	if (result) {
-		g_variant_get (result, "(b)", &convert);
-		g_variant_unref (result);
+	if (html_mode) {
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetMode(EvoEditor.MODE_HTML);");
+	} else {
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetMode(EvoEditor.MODE_PLAIN_TEXT);");
 	}
-
-	/* If toggling from HTML to the plain text mode, ask the user first if
-	 * he wants to convert the content. */
-	if (convert) {
-		if (!show_lose_formatting_dialog (wk_editor))
-			return;
-
-		webkit_editor_set_changed (wk_editor, TRUE);
-	}
-
-	wk_editor->priv->html_mode = html_mode;
-
-	e_util_invoke_g_dbus_proxy_call_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"SetEditorHTMLMode",
-		g_variant_new ("(tbb)", current_page_id (wk_editor), html_mode, convert),
-		wk_editor->priv->cancellable);
-
-	/* Update fonts - in plain text we only want monospaced */
-	webkit_editor_update_styles (E_CONTENT_EDITOR (wk_editor));
-	webkit_editor_style_updated_cb (wk_editor);
-
-	g_object_notify (G_OBJECT (wk_editor), "html-mode");
 }
 
 static void
