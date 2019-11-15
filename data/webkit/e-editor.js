@@ -42,6 +42,14 @@ var EvoEditor = {
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN : 12,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA : 13,
 
+	E_CONTENT_EDITOR_GET_INLINE_IMAGES : 1 << 0,
+	E_CONTENT_EDITOR_GET_RAW_BODY_HTML : 1 << 1,
+	E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN : 1 << 2,
+	E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED : 1 << 3,
+	E_CONTENT_EDITOR_GET_RAW_DRAFT : 1 << 4,
+	E_CONTENT_EDITOR_GET_TO_SEND_HTML : 1 << 5,
+	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN : 1 << 6,
+
 	/* Flags for ClaimAffectedContent() */
 	CLAIM_CONTENT_FLAG_NONE : 0,
 	CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
@@ -1231,6 +1239,140 @@ EvoEditor.SetMode = function(mode)
 			EvoUndoRedo.Enable();
 		}
 	}
+}
+
+EvoEditor.GetContent = function(flags, cid_uid_prefix)
+{
+	var content_data = {}, img_elems = [], elems, ii, jj;
+
+	if (!document.body)
+		return content_data;
+
+	EvoUndoRedo.Disable();
+
+	try {
+		if ((flags & EvoEditor.E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED) != 0) {
+			var hidden_elems = [];
+
+			try {
+				elems = document.getElementsByClassName("-x-evo-signature-wrapper");
+				if (elems && elems.length) {
+					for (ii = 0; ii < elems.length; ii++) {
+						var elem = elems.item(ii);
+
+						if (elem && !elem.hidden) {
+							hidden_elems[hidden_elems.length] = elem;
+							elem.hidden = true;
+						}
+					}
+				}
+
+				elems = document.getElementsByTagName("BLOCKQUOTE");
+				if (elems && elems.length) {
+					for (ii = 0; ii < elems.length; ii++) {
+						var elem = elems.item(ii);
+
+						if (elem && !elem.hidden) {
+							hidden_elems[hidden_elems.length] = elem;
+							elem.hidden = true;
+						}
+					}
+				}
+
+				content_data["raw-body-stripped"] = document.body.innerText;
+			} finally {
+				for (ii = 0; ii < hidden_elems.length; ii++) {
+					hidden_elems[ii].hidden = false;
+				}
+			}
+		}
+
+		// Do these before changing image sources
+		if ((flags & EvoEditor.E_CONTENT_EDITOR_GET_RAW_BODY_HTML) != 0)
+			content_data["raw-body-html"] = document.body.innerHTML;
+
+		if ((flags & EvoEditor.E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN) != 0)
+			content_data["raw-body-plain"] = document.body.innerText;
+
+		if (EvoEditor.mode == EvoEditor.MODE_HTML &&
+		    (flags & EvoEditor.E_CONTENT_EDITOR_GET_INLINE_IMAGES) != 0) {
+			var images = [];
+
+			for (ii = 0; ii < document.images.length; ii++) {
+				var elem = document.images.item(ii);
+
+				if (elem && elem.src && (
+				    elem.src.toLowerCase().startsWith("data:") ||
+				    elem.src.toLowerCase().startsWith("file://"))) {
+					for (jj = 0; jj < img_elems.length; jj++) {
+						if (elem.src == img_elems[jj].orig_src) {
+							elem.subelems[elem.subelems.length] = elem;
+							elem.src = img_elems[jj].cid;
+							break;
+						}
+					}
+
+					if (jj >= img_elems.length) {
+						var img_obj = {
+							subelems : [ elem ],
+							cid : "cid:" + cid_uid_prefix + "-" + img_elems.length,
+							orig_src : elem.src
+						};
+
+						if (elem.src.toLowerCase().startsWith("cid:"))
+							img_obj.cid = elem.src;
+
+						img_elems[img_elems.length] = img_obj;
+						images[images.length] = {
+							cid : img_obj.cid,
+							src : elem.src
+						};
+						elem.src = img_obj.cid;
+					}
+				} else if (elem && elem.src && elem.src.toLowerCase().startsWith("cid:")) {
+					images[images.length] = {
+						cid : elem.src,
+						src : elem.src
+					};
+				}
+			}
+
+			if (images.length)
+				content_data["images"] = images;
+		}
+
+		// Draft should have replaced images as well
+		if ((flags & EvoEditor.E_CONTENT_EDITOR_GET_RAW_DRAFT) != 0) {
+			document.head.setAttribute("x-evo-selection", EvoSelection.ToString(EvoSelection.Store(document)));
+			try {
+				content_data["raw-draft"] = document.documentElement.innerHTML;
+			} finally {
+				document.head.removeAttribute("x-evo-selection");
+			}
+		}
+
+		if (EvoEditor.mode == EvoEditor.MODE_HTML &&
+		    (flags & EvoEditor.E_CONTENT_EDITOR_GET_TO_SEND_HTML) != 0)
+			content_data["to-send-html"] = EvoEditor.convertHtmlToSend();
+
+		if ((flags & EvoEditor.	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN) != 0) {
+			content_data["to-send-plain"] = EvoConvertToPlainText(document.body);
+		}
+	} finally {
+		try {
+			for (ii = 0; ii < img_elems.length; ii++) {
+				var img_obj = img_elems[ii];
+
+				for (jj = 0; jj < img_obj.subelems.length; jj++) {
+					img_obj.subelems[jj].src = img_obj.orig_src;
+				}
+			}
+		} finally {
+			EvoUndoRedo.Enable();
+		}
+	}
+
+	return content_data;
 }
 
 document.onload = EvoEditor.initializeContent;

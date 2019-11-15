@@ -40,6 +40,8 @@ struct _EHTMLEditor;
 #define E_TYPE_CONTENT_EDITOR e_content_editor_get_type ()
 G_DECLARE_INTERFACE (EContentEditor, e_content_editor, E, CONTENT_EDITOR, GtkWidget)
 
+typedef GHashTable EContentEditorContentHash;
+
 typedef void (*EContentEditorInitializedCallback)	(EContentEditor *content_editor,
 							 gpointer user_data);
 
@@ -56,10 +58,16 @@ struct _EContentEditorInterface {
 							 const gchar *content,
 							 EContentEditorInsertContentFlags flags);
 
-	gchar *		(*get_content)			(EContentEditor *editor,
-							 EContentEditorGetContentFlags flags,
+	void		(*get_content)			(EContentEditor *editor,
+							 guint32 flags, /* bit-or of EContentEditorGetContentFlags */
 							 const gchar *inline_images_from_domain,
-							 GSList **inline_images_parts /* newly created CamelMimePart * */);
+							 GCancellable *cancellable,
+							 GAsyncReadyCallback callback,
+							 gpointer user_data);
+	EContentEditorContentHash *
+			(*get_content_finish)		(EContentEditor *editor,
+							 GAsyncResult *result,
+							 GError **error);
 
 	void		(*insert_image)			(EContentEditor *editor,
 							 const gchar *uri);
@@ -129,9 +137,16 @@ struct _EContentEditorInterface {
 
 	void		(*selection_wrap)		(EContentEditor *editor);
 
-	guint		(*get_caret_position)		(EContentEditor *editor);
+	void		(*get_caret_position)		(EContentEditor *editor,
+							 GCancellable *cancellable,
+							 GAsyncReadyCallback callback,
+							 gpointer user_data);
 
-	guint		(*get_caret_offset)		(EContentEditor *editor);
+	gboolean	(*get_caret_position_finish)	(EContentEditor *editor,
+							 GAsyncResult *result,
+							 guint *out_position,
+							 guint *out_offset,
+							 GError **error);
 
 	gchar *		(*get_current_signature_uid)	(EContentEditor *editor);
 
@@ -543,10 +558,48 @@ void		e_content_editor_insert_content	(EContentEditor *editor,
 						 const gchar *content,
 						 EContentEditorInsertContentFlags flags);
 
-gchar *		e_content_editor_get_content	(EContentEditor *editor,
-						 EContentEditorGetContentFlags flags,
+void		e_content_editor_get_content	(EContentEditor *editor,
+						 guint32 flags, /* bit-or of EContentEditorGetContentFlags */
 						 const gchar *inline_images_from_domain,
-						 GSList **inline_images_parts /* newly created CamelMimePart * */);
+						 GCancellable *cancellable,
+						 GAsyncReadyCallback callback,
+						 gpointer user_data);
+EContentEditorContentHash *
+		e_content_editor_get_content_finish
+						(EContentEditor *editor,
+						 GAsyncResult *result,
+						 GError **error);
+EContentEditorContentHash *
+		e_content_editor_util_new_content_hash
+						(void);
+void		e_content_editor_util_free_content_hash
+						(EContentEditorContentHash *content_hash);
+void		e_content_editor_util_put_content_data
+						(EContentEditorContentHash *content_hash,
+						 EContentEditorGetContentFlags flag,
+						 const gchar *data);
+void		e_content_editor_util_take_content_data
+						(EContentEditorContentHash *content_hash,
+						 EContentEditorGetContentFlags flag,
+						 gpointer data,
+						 GDestroyNotify destroy_data);
+void		e_content_editor_util_take_content_data_images
+						(EContentEditorContentHash *content_hash,
+						 GSList *image_parts); /* CamelMimePart * */
+gpointer	e_content_editor_util_get_content_data
+						(EContentEditorContentHash *content_hash,
+						 EContentEditorGetContentFlags flag);
+gpointer	e_content_editor_util_steal_content_data
+						(EContentEditorContentHash *content_hash,
+						 EContentEditorGetContentFlags flag,
+						 GDestroyNotify *out_destroy_data);
+CamelMimePart *	e_content_editor_util_create_data_mimepart
+						(const gchar *uri,
+						 const gchar *cid,
+						 gboolean as_inline,
+						 const gchar *prefer_filename,
+						 const gchar *prefer_mime_type,
+						 GCancellable *cancellable);
 
 void            e_content_editor_insert_image_from_mime_part
 						(EContentEditor *editor,
@@ -627,11 +680,18 @@ void		e_content_editor_selection_restore
 
 void		e_content_editor_selection_wrap	(EContentEditor *editor);
 
-guint		e_content_editor_get_caret_position
-						(EContentEditor *editor);
+void		e_content_editor_get_caret_position
+						(EContentEditor *editor,
+						 GCancellable *cancellable,
+						 GAsyncReadyCallback callback,
+						 gpointer user_data);
 
-guint		e_content_editor_get_caret_offset
-						(EContentEditor *editor);
+gboolean	e_content_editor_get_caret_position_finish
+						(EContentEditor *editor,
+						 GAsyncResult *result,
+						 guint *out_position,
+						 guint *out_offset,
+						 GError **error);
 
 gchar *		e_content_editor_get_current_signature_uid
 						(EContentEditor *editor);

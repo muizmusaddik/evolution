@@ -83,6 +83,50 @@ test_utils_free_global_memory (void)
 	g_clear_object (&global_web_context);
 }
 
+typedef struct _GetContentData {
+	EContentEditorContentHash *content_hash;
+	gpointer async_data;
+} GetContentData;
+
+static void
+get_editor_content_hash_ready_cb (GObject *source_object,
+				  GAsyncResult *result,
+				  gpointer user_data)
+{
+	GetContentData *gcd = user_data;
+	GError *error = NULL;
+
+	g_assert_nonnull (gcd);
+	g_assert (E_IS_CONTENT_EDITOR (source_object));
+
+	gcd->content_hash = e_content_editor_get_content_finish (E_CONTENT_EDITOR (source_object), result, &error);
+
+	g_assert_no_error (error);
+
+	g_clear_error (&error);
+
+	test_utils_async_call_finish (gcd->async_data);
+}
+
+static EContentEditorContentHash *
+test_utils_get_editor_content_hash_sync (EContentEditor *cnt_editor,
+					 guint32 flags)
+{
+	GetContentData gcd;
+
+	g_assert (E_IS_CONTENT_EDITOR (cnt_editor));
+
+	gcd.content_hash = NULL;
+	gcd.async_data = test_utils_async_call_prepare ();
+
+	e_content_editor_get_content (cnt_editor, flags, "test-domain", NULL, get_editor_content_hash_ready_cb, &gcd);
+
+	g_assert (test_utils_async_call_wait (gcd.async_data, MAX (event_processing_delay_ms / 25, 1) + 1));
+	g_assert_nonnull (gcd.content_hash);
+
+	return gcd.content_hash;
+}
+
 typedef struct _UndoContent {
 	gchar *html;
 	gchar *plain;
@@ -92,16 +136,20 @@ static UndoContent *
 undo_content_new (TestFixture *fixture)
 {
 	EContentEditor *cnt_editor;
+	EContentEditorContentHash *content_hash;
 	UndoContent *uc;
 
 	g_return_val_if_fail (fixture != NULL, NULL);
 	g_return_val_if_fail (E_IS_HTML_EDITOR (fixture->editor), NULL);
 
 	cnt_editor = e_html_editor_get_content_editor (fixture->editor);
+	content_hash = test_utils_get_editor_content_hash_sync (cnt_editor, E_CONTENT_EDITOR_GET_TO_SEND_HTML | E_CONTENT_EDITOR_GET_TO_SEND_PLAIN);
 
 	uc = g_new0 (UndoContent, 1);
-	uc->html = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_HTML, NULL, NULL);
-	uc->plain = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_PLAIN, NULL, NULL);
+	uc->html = e_content_editor_util_steal_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_HTML, NULL);
+	uc->plain = e_content_editor_util_steal_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_PLAIN, NULL);
+
+	e_content_editor_util_free_content_hash (content_hash);
 
 	g_warn_if_fail (uc->html != NULL);
 	g_warn_if_fail (uc->plain != NULL);
@@ -127,15 +175,17 @@ undo_content_test (TestFixture *fixture,
 		   gint cmd_index)
 {
 	EContentEditor *cnt_editor;
-	gchar *text;
+	EContentEditorContentHash *content_hash;
+	const gchar *text;
 
 	g_return_val_if_fail (fixture != NULL, FALSE);
 	g_return_val_if_fail (E_IS_HTML_EDITOR (fixture->editor), FALSE);
 	g_return_val_if_fail (uc != NULL, FALSE);
 
 	cnt_editor = e_html_editor_get_content_editor (fixture->editor);
+	content_hash = test_utils_get_editor_content_hash_sync (cnt_editor, E_CONTENT_EDITOR_GET_TO_SEND_HTML | E_CONTENT_EDITOR_GET_TO_SEND_PLAIN);
 
-	text = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_HTML, NULL, NULL);
+	text = e_content_editor_util_get_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_HTML);
 	g_return_val_if_fail (text != NULL, FALSE);
 
 	if (!test_utils_html_equal (fixture, text, uc->html)) {
@@ -143,13 +193,13 @@ undo_content_test (TestFixture *fixture,
 			g_printerr ("%s: returned HTML\n---%s---\n and expected HTML\n---%s---\n do not match at command %d\n", G_STRFUNC, text, uc->html, cmd_index);
 		else
 			g_warning ("%s: returned HTML\n---%s---\n and expected HTML\n---%s---\n do not match at command %d", G_STRFUNC, text, uc->html, cmd_index);
-		g_free (text);
+
+		e_content_editor_util_free_content_hash (content_hash);
+
 		return FALSE;
 	}
 
-	g_free (text);
-
-	text = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_PLAIN, NULL, NULL);
+	text = e_content_editor_util_get_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_PLAIN);
 	g_return_val_if_fail (text != NULL, FALSE);
 
 	if (!test_utils_html_equal (fixture, text, uc->plain)) {
@@ -157,11 +207,13 @@ undo_content_test (TestFixture *fixture,
 			g_printerr ("%s: returned Plain\n---%s---\n and expected Plain\n---%s---\n do not match at command %d\n", G_STRFUNC, text, uc->plain, cmd_index);
 		else
 			g_warning ("%s: returned Plain\n---%s---\n and expected Plain\n---%s---\n do not match at command %d", G_STRFUNC, text, uc->plain, cmd_index);
-		g_free (text);
+
+		e_content_editor_util_free_content_hash (content_hash);
+
 		return FALSE;
 	}
 
-	g_free (text);
+	e_content_editor_util_free_content_hash (content_hash);
 
 	return TRUE;
 }
@@ -1028,7 +1080,8 @@ test_utils_run_simple_test (TestFixture *fixture,
 			    const gchar *expected_plain)
 {
 	EContentEditor *cnt_editor;
-	gchar *text;
+	EContentEditorContentHash *content_hash;
+	const gchar *text;
 
 	g_return_val_if_fail (fixture != NULL, FALSE);
 	g_return_val_if_fail (E_IS_HTML_EDITOR (fixture->editor), FALSE);
@@ -1039,8 +1092,10 @@ test_utils_run_simple_test (TestFixture *fixture,
 	if (!test_utils_process_commands (fixture, commands))
 		return FALSE;
 
+	content_hash = test_utils_get_editor_content_hash_sync (cnt_editor, E_CONTENT_EDITOR_GET_TO_SEND_HTML | E_CONTENT_EDITOR_GET_TO_SEND_PLAIN);
+
 	if (expected_html) {
-		text = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_HTML, NULL, NULL);
+		text = e_content_editor_util_get_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_HTML);
 		g_return_val_if_fail (text != NULL, FALSE);
 
 		if (!test_utils_html_equal (fixture, text, expected_html)) {
@@ -1048,15 +1103,15 @@ test_utils_run_simple_test (TestFixture *fixture,
 				g_printerr ("%s: returned HTML\n---%s---\n and expected HTML\n---%s---\n do not match\n", G_STRFUNC, text, expected_html);
 			else
 				g_warning ("%s: returned HTML\n---%s---\n and expected HTML\n---%s---\n do not match", G_STRFUNC, text, expected_html);
-			g_free (text);
+
+			e_content_editor_util_free_content_hash (content_hash);
+
 			return FALSE;
 		}
-
-		g_free (text);
 	}
 
 	if (expected_plain) {
-		text = e_content_editor_get_content (cnt_editor, E_CONTENT_EDITOR_GET_PROCESSED | E_CONTENT_EDITOR_GET_TEXT_PLAIN, NULL, NULL);
+		text = e_content_editor_util_get_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_PLAIN);
 		g_return_val_if_fail (text != NULL, FALSE);
 
 		if (!test_utils_html_equal (fixture, text, expected_plain)) {
@@ -1064,12 +1119,14 @@ test_utils_run_simple_test (TestFixture *fixture,
 				g_printerr ("%s: returned Plain\n---%s---\n and expected Plain\n---%s---\n do not match\n", G_STRFUNC, text, expected_plain);
 			else
 				g_warning ("%s: returned Plain\n---%s---\n and expected Plain\n---%s---\n do not match", G_STRFUNC, text, expected_plain);
-			g_free (text);
+
+			e_content_editor_util_free_content_hash (content_hash);
+
 			return FALSE;
 		}
-
-		g_free (text);
 	}
+
+	e_content_editor_util_free_content_hash (content_hash);
 
 	return TRUE;
 }

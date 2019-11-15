@@ -110,9 +110,14 @@ void		e_html_editor_update_spell_actions
  * High-Level Editing Interface
  *****************************************************************************/
 
-gboolean	e_html_editor_save		(EHTMLEditor *editor,
+void		e_html_editor_save		(EHTMLEditor *editor,
 						 const gchar *filename,
 						 gboolean as_html,
+						 GCancellable *cancellable,
+						 GAsyncReadyCallback callback,
+						 gpointer user_data);
+gboolean	e_html_editor_save_finish	(EHTMLEditor *editor,
+						 GAsyncResult *result,
 						 GError **error);
 
 G_END_DECLS

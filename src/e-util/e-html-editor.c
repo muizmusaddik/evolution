@@ -1334,66 +1334,157 @@ e_html_editor_pack_above (EHTMLEditor *editor,
 	editor->priv->editor_layout_row++;
 }
 
+typedef struct _SaveContentData {
+	GOutputStream *stream;
+	GCancellable *cancellable;
+} SaveContentData;
+
+static SaveContentData *
+save_content_data_new (GOutputStream *stream,
+		       GCancellable *cancellable)
+{
+	SaveContentData *scd;
+
+	scd = g_slice_new (SaveContentData);
+	scd->stream = stream;
+	scd->cancellable = cancellable ? g_object_ref (cancellable) : NULL;
+
+	return scd;
+}
+
+static void
+save_content_data_free (gpointer ptr)
+{
+	SaveContentData *scd = ptr;
+
+	if (scd) {
+		g_clear_object (&scd->stream);
+		g_clear_object (&scd->cancellable);
+		g_slice_free (SaveContentData, scd);
+	}
+}
+
+static void
+e_html_editor_save_content_ready_cb (GObject *source_object,
+				     GAsyncResult *result,
+				     gpointer user_data)
+{
+	ESimpleAsyncResult *simple = user_data;
+	EContentEditorContentHash *content_hash;
+	GError *error = NULL;
+
+	g_return_if_fail (E_IS_CONTENT_EDITOR (source_object));
+	g_return_if_fail (E_IS_SIMPLE_ASYNC_RESULT (simple));
+
+	content_hash = e_content_editor_get_content_finish (E_CONTENT_EDITOR (source_object), result, &error);
+
+	if (content_hash) {
+		const gchar *content;
+
+		content = e_content_editor_util_get_content_data (content_hash, GPOINTER_TO_UINT (e_simple_async_result_get_op_pointer (simple)));
+
+		if (!content) {
+			g_set_error_literal (&error, G_IO_ERROR, G_IO_ERROR_FAILED, _("Failed to obtain content of editor"));
+		} else {
+			SaveContentData *scd;
+			gsize written;
+
+			scd = e_simple_async_result_get_user_data (simple);
+
+			g_output_stream_write_all (scd->stream, content, strlen (content), &written, scd->cancellable, &error);
+		}
+
+		e_content_editor_util_free_content_hash (content_hash);
+
+		if (error)
+			e_simple_async_result_take_error (simple, error);
+	} else {
+		e_simple_async_result_take_error (simple, error);
+	}
+
+	e_simple_async_result_complete (simple);
+	g_object_unref (simple);
+}
+
 /**
  * e_html_editor_save:
  * @editor: an #EHTMLEditor
  * @filename: file into which to save the content
  * @as_html: whether the content should be saved as HTML or plain text
- * @error:[out] a #GError
+ * @cancellable: an optional #GCancellable, or %NULL
+ * @callback: (scope async): a #GAsyncReadyCallback to call when the save is finished
+ * @user_data: (closure callback): user data passed to @callback
  *
- * Saves current content of the #EContentEditor into given file. When @as_html
- * is @FALSE, the content is first converted into plain text.
+ * Starts an asynchronous save of the current content of the #EContentEditor
+ * into given file. When @as_html is @FALSE, the content is first converted
+ * into plain text.
  *
- * Returns: @TRUE when content is succesfully saved, @FALSE otherwise.
- */
-gboolean
+ * Finish the call with e_html_editor_save_finish() from the @callback.
+ *
+ * Since: 3.36
+ **/
+void
 e_html_editor_save (EHTMLEditor *editor,
-                    const gchar *filename,
-                    gboolean as_html,
-                    GError **error)
+		    const gchar *filename,
+		    gboolean as_html,
+		    GCancellable *cancellable,
+		    GAsyncReadyCallback callback,
+		    gpointer user_data)
 {
 	EContentEditor *cnt_editor;
+	ESimpleAsyncResult *simple;
+	EContentEditorGetContentFlags flag;
+	SaveContentData *scd;
 	GFile *file;
 	GFileOutputStream *stream;
-	gchar *content;
-	gsize written;
+	GError *local_error = NULL;
+
+	simple = e_simple_async_result_new (G_OBJECT (editor), callback, user_data, e_html_editor_save);
 
 	file = g_file_new_for_path (filename);
-	stream = g_file_replace (
-		file, NULL, FALSE, G_FILE_CREATE_NONE, NULL, error);
-	if ((error && *error) || !stream)
-		return FALSE;
+	stream = g_file_replace (file, NULL, FALSE, G_FILE_CREATE_NONE, NULL, &local_error);
+	if (local_error || !stream) {
+		e_simple_async_result_take_error (simple, local_error);
+		e_simple_async_result_complete_idle (simple);
+
+		g_object_unref (simple);
+		g_object_unref (file);
+
+		return;
+	}
+
+	flag = as_html ? E_CONTENT_EDITOR_GET_TO_SEND_HTML : E_CONTENT_EDITOR_GET_TO_SEND_PLAIN;
+
+	scd = save_content_data_new (G_OUTPUT_STREAM (stream), cancellable);
+
+	e_simple_async_result_set_user_data (simple, scd, save_content_data_free);
+	e_simple_async_result_set_op_pointer (simple, GUINT_TO_POINTER (flag), NULL);
 
 	cnt_editor = e_html_editor_get_content_editor (editor);
 
-	if (as_html)
-		content = e_content_editor_get_content (
-			cnt_editor,
-			E_CONTENT_EDITOR_GET_TEXT_HTML |
-			E_CONTENT_EDITOR_GET_PROCESSED,
-			NULL, NULL);
-	else
-		content = e_content_editor_get_content (
-			cnt_editor,
-			E_CONTENT_EDITOR_GET_TEXT_PLAIN |
-			E_CONTENT_EDITOR_GET_PROCESSED,
-			NULL, NULL);
+	e_content_editor_get_content (cnt_editor, flag, NULL, cancellable, e_html_editor_save_content_ready_cb, simple);
 
-	if (!content || !*content) {
-		g_free (content);
-		g_set_error (
-			error, G_IO_ERROR, G_IO_ERROR_FAILED,
-			"Failed to obtain content of editor");
-		return FALSE;
-	}
-
-	g_output_stream_write_all (
-		G_OUTPUT_STREAM (stream), content, strlen (content),
-		&written, NULL, error);
-
-	g_free (content);
-	g_object_unref (stream);
 	g_object_unref (file);
+}
 
-	return TRUE;
+/**
+ * e_html_editor_save_finish:
+ * @editor: an #EHTMLEditor
+ * @result: a #GAsyncResult of the operation
+ * @error: return location for a #GError, or %NULL
+ *
+ * Finished the previous call of e_html_editor_save().
+ *
+ * Returns: whether the save succeeded.
+ *
+ * Since: 3.36
+ **/
+gboolean
+e_html_editor_save_finish (EHTMLEditor *editor,
+			   GAsyncResult *result,
+			   GError **error)
+{
+	g_return_val_if_fail (e_simple_async_result_is_valid (result, G_OBJECT (editor), e_html_editor_save), FALSE);
+
+	return !e_simple_async_result_propagate_error (E_SIMPLE_ASYNC_RESULT (result), error);
 }

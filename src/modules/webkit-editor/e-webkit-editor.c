@@ -1775,147 +1775,150 @@ webkit_editor_insert_content (EContentEditor *editor,
 		g_warning ("Unsupported flags combination (%d) in (%s)", flags, G_STRFUNC);
 }
 
-static CamelMimePart *
-create_part_for_inline_image_from_element_data (const gchar *element_src,
-                                                const gchar *name,
-                                                const gchar *id)
-{
-	CamelStream *stream;
-	CamelDataWrapper *wrapper;
-	CamelMimePart *part = NULL;
-	gsize decoded_size;
-	gssize size;
-	gchar *mime_type = NULL;
-	const gchar *base64_encoded_data;
-	guchar *base64_decoded_data = NULL;
-
-	base64_encoded_data = strstr (element_src, ";base64,");
-	if (!base64_encoded_data)
-		goto out;
-
-	mime_type = g_strndup (
-		element_src + 5,
-		base64_encoded_data - (strstr (element_src, "data:") + 5));
-
-	/* Move to actual data */
-	base64_encoded_data += 8;
-
-	base64_decoded_data = g_base64_decode (base64_encoded_data, &decoded_size);
-
-	stream = camel_stream_mem_new ();
-	size = camel_stream_write (
-		stream, (gchar *) base64_decoded_data, decoded_size, NULL, NULL);
-
-	if (size == -1)
-		goto out;
-
-	wrapper = camel_data_wrapper_new ();
-	camel_data_wrapper_construct_from_stream_sync (
-		wrapper, stream, NULL, NULL);
-	g_object_unref (stream);
-
-	camel_data_wrapper_set_mime_type (wrapper, mime_type);
-
-	part = camel_mime_part_new ();
-	camel_medium_set_content (CAMEL_MEDIUM (part), wrapper);
-	g_object_unref (wrapper);
-
-	camel_mime_part_set_content_id (part, id);
-	camel_mime_part_set_filename (part, name);
-	camel_mime_part_set_disposition (part, "inline");
-	camel_mime_part_set_encoding (part, CAMEL_TRANSFER_ENCODING_BASE64);
-out:
-	g_free (mime_type);
-	g_free (base64_decoded_data);
-
-	return part;
-}
-
-static GSList *
-webkit_editor_get_parts_for_inline_images (GVariant *images)
-{
-	const gchar *element_src, *name, *id;
-	GVariantIter *iter;
-	GSList *parts = NULL;
-
-	if (g_variant_check_format_string (images, "a(sss)", FALSE)) {
-		g_variant_get (images, "a(sss)", &iter);
-		while (g_variant_iter_loop (iter, "(&s&s&s)", &element_src, &name, &id)) {
-			CamelMimePart *part;
-
-			part = create_part_for_inline_image_from_element_data (
-				element_src, name, id);
-			parts = g_slist_prepend (parts, part);
-		}
-		g_variant_iter_free (iter);
-	}
-
-	return parts ? g_slist_reverse (parts) : NULL;
-}
-
-static gchar *
+static void
 webkit_editor_get_content (EContentEditor *editor,
-                           EContentEditorGetContentFlags flags,
-                           const gchar *inline_images_from_domain,
-                           GSList **inline_images_parts)
+			   guint32 flags, /* bit-or of EContentEditorGetContentFlags */
+			   const gchar *inline_images_from_domain,
+                           GCancellable *cancellable,
+			   GAsyncReadyCallback callback,
+			   gpointer user_data)
 {
-	EWebKitEditor *wk_editor;
-	GVariant *result;
+	gchar *script, *cid_uid_prefix;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
+	cid_uid_prefix = camel_header_msgid_generate (inline_images_from_domain ? inline_images_from_domain : "");
+	script = e_web_view_jsc_printf_script ("EvoEditor.GetContent(%d, %s)", flags, cid_uid_prefix);
+
+	webkit_web_view_run_javascript (WEBKIT_WEB_VIEW (editor), script, cancellable, callback, user_data);
+
+	g_free (cid_uid_prefix);
+	g_free (script);
+}
+
+static EContentEditorContentHash *
+webkit_editor_get_content_finish (EContentEditor *editor,
+				  GAsyncResult *result,
+				  GError **error)
+{
+	WebKitJavascriptResult *js_result;
+	EContentEditorContentHash *content_hash = NULL;
 	GError *local_error = NULL;
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy)
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), NULL);
+	g_return_val_if_fail (result != NULL, NULL);
+
+	js_result = webkit_web_view_run_javascript_finish (WEBKIT_WEB_VIEW (editor), result, &local_error);
+
+	if (local_error) {
+		g_propagate_error (error, local_error);
+
+		if (js_result)
+			webkit_javascript_result_unref (js_result);
+
 		return NULL;
-
-	if ((flags & E_CONTENT_EDITOR_GET_TEXT_HTML) &&
-	    !(flags & E_CONTENT_EDITOR_GET_PROCESSED) &&
-            !(flags & E_CONTENT_EDITOR_GET_BODY))
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMEmbedStyleSheet",
-			g_variant_new (
-				"(ts)",
-				current_page_id (wk_editor),
-				wk_editor->priv->current_user_stylesheet),
-			wk_editor->priv->cancellable);
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper (
-		wk_editor->priv->web_extension_proxy,
-		"DOMGetContent",
-		g_variant_new (
-			"(tsi)",
-			current_page_id (wk_editor),
-			inline_images_from_domain ? inline_images_from_domain : "",
-			(gint32) flags),
-		wk_editor->priv->cancellable,
-		&local_error);
-
-	webkit_editor_set_last_error (wk_editor, local_error);
-	g_clear_error (&local_error);
-
-	if ((flags & E_CONTENT_EDITOR_GET_TEXT_HTML) &&
-	    !(flags & E_CONTENT_EDITOR_GET_PROCESSED) &&
-            !(flags & E_CONTENT_EDITOR_GET_BODY))
-		webkit_editor_call_simple_extension_function (
-			wk_editor, "DOMRemoveEmbeddedStyleSheet");
-
-	if (result) {
-		GVariant *images = NULL;
-		gchar *value = NULL;
-
-		g_variant_get (result, "(sv)", &value, &images);
-		if (inline_images_parts)
-			*inline_images_parts = webkit_editor_get_parts_for_inline_images (images);
-
-		if (images)
-			g_variant_unref (images);
-
-		g_variant_unref (result);
-
-		return value;
 	}
 
-	return NULL;
+	if (js_result) {
+		JSCException *exception;
+		JSCValue *value;
+
+		value = webkit_javascript_result_get_js_value (js_result);
+		exception = jsc_context_get_exception (jsc_value_get_context (value));
+
+		if (exception) {
+			g_set_error (error, G_IO_ERROR, G_IO_ERROR_FAILED, "EvoEditor.GetContent() call failed: %s", jsc_exception_get_message (exception));
+			jsc_context_clear_exception (jsc_value_get_context (value));
+			webkit_javascript_result_unref (js_result);
+			return NULL;
+		}
+
+		if (jsc_value_is_object (value)) {
+			struct _formats {
+				const gchar *name;
+				guint32 flags;
+			} formats[] = {
+				{ "raw-body-html", E_CONTENT_EDITOR_GET_RAW_BODY_HTML },
+				{ "raw-body-plain", E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN },
+				{ "raw-body-stripped", E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED },
+				{ "raw-draft", E_CONTENT_EDITOR_GET_RAW_DRAFT },
+				{ "to-send-html", E_CONTENT_EDITOR_GET_TO_SEND_HTML },
+				{ "to-send-plain", E_CONTENT_EDITOR_GET_TO_SEND_PLAIN }
+			};
+			JSCValue *images_value;
+			gint ii;
+
+			content_hash = e_content_editor_util_new_content_hash ();
+
+			for (ii = 0; ii < G_N_ELEMENTS (formats); ii++) {
+				gchar *cnt;
+
+				cnt = e_web_view_jsc_get_object_property_string (value, formats[ii].name, NULL);
+				if (cnt)
+					e_content_editor_util_take_content_data (content_hash, formats[ii].flags, cnt, g_free);
+			}
+
+			images_value = jsc_value_object_get_property (value, "images");
+
+			if (images_value) {
+				if (jsc_value_is_array (images_value)) {
+					GSList *image_parts = NULL;
+					gint length;
+
+					length = e_web_view_jsc_get_object_property_int32 (images_value, "length", 0);
+
+					for (ii = 0; ii < length; ii++) {
+						JSCValue *item_value;
+
+						item_value = jsc_value_object_get_property_at_index (images_value, ii);
+
+						if (!item_value ||
+						    jsc_value_is_null (item_value) ||
+						    jsc_value_is_undefined (item_value)) {
+							g_warn_if_reached ();
+							g_clear_object (&item_value);
+							break;
+						}
+
+						if (jsc_value_is_object (item_value)) {
+							gchar *src, *cid;
+
+							src = e_web_view_jsc_get_object_property_string (item_value, "src", NULL);
+							cid = e_web_view_jsc_get_object_property_string (item_value, "cid", NULL);
+
+							if (src && *src && cid && *cid) {
+								CamelMimePart *part;
+
+								part = e_content_editor_util_create_data_mimepart (src, cid, TRUE, NULL, NULL,
+									E_WEBKIT_EDITOR (editor)->priv->cancellable);
+
+								if (part)
+									image_parts = g_slist_prepend (image_parts, part);
+							}
+
+							g_free (src);
+							g_free (cid);
+						}
+
+						g_clear_object (&item_value);
+					}
+
+					if (image_parts)
+						e_content_editor_util_take_content_data_images (content_hash, image_parts);
+				} else {
+					g_warn_if_reached ();
+				}
+
+				g_clear_object (&images_value);
+			}
+		} else {
+			g_warn_if_reached ();
+		}
+
+		webkit_javascript_result_unref (js_result);
+	}
+
+	return content_hash;
 }
 
 static gboolean
@@ -2397,60 +2400,38 @@ webkit_editor_insert_signature (EContentEditor *editor,
 	return ret_val;
 }
 
-static guint
-webkit_editor_get_caret_position (EContentEditor *editor)
+static void
+webkit_editor_get_caret_position (EContentEditor *editor,
+				  GCancellable *cancellable,
+				  GAsyncReadyCallback callback,
+				  gpointer user_data)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
-	guint ret_val = 0;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return 0;
-	}
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMGetCaretPosition",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
-
-	if (result) {
-		g_variant_get (result, "(u)", &ret_val);
-		g_variant_unref (result);
-	}
-
-	return ret_val;
+	/* TODO */
 }
 
-static guint
-webkit_editor_get_caret_offset (EContentEditor *editor)
+static gboolean
+webkit_editor_get_caret_position_finish (EContentEditor *editor,
+					 GAsyncResult *result,
+					 guint *out_position,
+					 guint *out_offset,
+					 GError **error)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
-	guint ret_val = 0;
+	gboolean success = FALSE;
+
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), FALSE);
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return 0;
-	}
+	/* TODO */
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMGetCaretOffset",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
-
-	if (result) {
-		g_variant_get (result, "(u)", &ret_val);
-		g_variant_unref (result);
-	}
-
-	return ret_val;
+	return success;
 }
 
 static void
@@ -6498,6 +6479,7 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->update_styles = webkit_editor_update_styles;
 	iface->insert_content = webkit_editor_insert_content;
 	iface->get_content = webkit_editor_get_content;
+	iface->get_content_finish = webkit_editor_get_content_finish;
 	iface->insert_image = webkit_editor_insert_image;
 	iface->insert_image_from_mime_part = webkit_editor_insert_image_from_mime_part;
 	iface->insert_emoticon = webkit_editor_insert_emoticon;
@@ -6525,7 +6507,7 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->selection_restore = webkit_editor_selection_restore;
 	iface->selection_wrap = webkit_editor_selection_wrap;
 	iface->get_caret_position = webkit_editor_get_caret_position;
-	iface->get_caret_offset = webkit_editor_get_caret_offset;
+	iface->get_caret_position_finish = webkit_editor_get_caret_position_finish;
 	iface->get_current_signature_uid =  webkit_editor_get_current_signature_uid;
 	iface->is_ready = webkit_editor_is_ready;
 	iface->insert_signature = webkit_editor_insert_signature;

@@ -23,6 +23,7 @@
 
 #include "e-html-editor.h"
 #include "e-util-enumtypes.h"
+#include "e-misc-utils.h"
 #include "e-content-editor.h"
 
 G_DEFINE_INTERFACE (EContentEditor, e_content_editor, GTK_TYPE_WIDGET);
@@ -1574,25 +1575,344 @@ e_content_editor_insert_content (EContentEditor *editor,
 	iface->insert_content (editor, content, flags);
 }
 
-gchar *
+/*
+ Finish the operation with e_content_editor_get_content_finish().
+ */
+void
 e_content_editor_get_content (EContentEditor *editor,
-                              EContentEditorGetContentFlags flags,
+			      guint32 flags,
 			      const gchar *inline_images_from_domain,
-			      GSList **inline_images_parts /* newly created CamelMimePart * */)
+			      GCancellable *cancellable,
+			      GAsyncReadyCallback callback,
+			      gpointer user_data)
+{
+	EContentEditorInterface *iface;
+
+	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
+
+	if ((flags & E_CONTENT_EDITOR_GET_INLINE_IMAGES))
+		g_return_if_fail (inline_images_from_domain != NULL);
+
+	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
+	g_return_if_fail (iface != NULL);
+	g_return_if_fail (iface->get_content != NULL);
+
+	iface->get_content (editor, flags, inline_images_from_domain, cancellable, callback, user_data);
+}
+
+/*
+ Finishes previous call of e_content_editor_get_content(). The implementation
+ creates the GHashTable with e_content_editor_util_new_content_hash() and fills
+ it with e_content_editor_util_put_content_data(), e_content_editor_util_take_content_data()
+ or e_content_editor_util_take_content_data_images(). The caller can access
+ the members with e_content_editor_util_get_content_data().
+
+ The returned pointer should be freed with e_content_editor_util_free_content_hash(),
+ when done with it.
+ */
+EContentEditorContentHash *
+e_content_editor_get_content_finish (EContentEditor *editor,
+				     GAsyncResult *result,
+				     GError **error)
 {
 	EContentEditorInterface *iface;
 
 	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), NULL);
-	if ((flags & E_CONTENT_EDITOR_GET_INLINE_IMAGES)) {
-		g_return_val_if_fail (inline_images_from_domain != NULL, NULL);
-		g_return_val_if_fail (inline_images_parts != NULL, NULL);
-	}
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
 	g_return_val_if_fail (iface != NULL, NULL);
 	g_return_val_if_fail (iface->get_content != NULL, NULL);
 
-	return iface->get_content (editor, flags, inline_images_from_domain, inline_images_parts);
+	return iface->get_content_finish (editor, result, error);
+}
+
+typedef struct _ContentHashData {
+	gpointer data;
+	GDestroyNotify destroy_data;
+} ContentHashData;
+
+static ContentHashData *
+content_hash_data_new (gpointer data,
+		       GDestroyNotify destroy_data)
+{
+	ContentHashData *chd;
+
+	chd = g_slice_new (ContentHashData);
+	chd->data = data;
+	chd->destroy_data = destroy_data;
+
+	return chd;
+}
+
+static void
+content_hash_data_free (gpointer ptr)
+{
+	ContentHashData *chd = ptr;
+
+	if (ptr) {
+		if (chd->destroy_data && chd->data)
+			chd->destroy_data (chd->data);
+
+		g_slice_free (ContentHashData, chd);
+	}
+}
+
+static void
+content_data_free_obj_slist (gpointer ptr)
+{
+	GSList *lst = ptr;
+
+	g_slist_free_full (lst, g_object_unref);
+}
+
+EContentEditorContentHash *
+e_content_editor_util_new_content_hash (void)
+{
+	return (EContentEditorContentHash *) g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, content_hash_data_free);
+}
+
+void
+e_content_editor_util_free_content_hash (EContentEditorContentHash *content_hash)
+{
+	if (content_hash)
+		g_hash_table_unref ((GHashTable *) content_hash);
+}
+
+void
+e_content_editor_util_put_content_data (EContentEditorContentHash *content_hash,
+					EContentEditorGetContentFlags flag,
+					const gchar *data)
+{
+	g_return_if_fail (content_hash != NULL);
+	g_return_if_fail (flag != E_CONTENT_EDITOR_GET_ALL);
+	g_return_if_fail (data != NULL);
+
+	e_content_editor_util_take_content_data (content_hash, flag, g_strdup (data), g_free);
+}
+
+void
+e_content_editor_util_take_content_data (EContentEditorContentHash *content_hash,
+					 EContentEditorGetContentFlags flag,
+					 gpointer data,
+					 GDestroyNotify destroy_data)
+{
+	g_return_if_fail (content_hash != NULL);
+	g_return_if_fail (flag != E_CONTENT_EDITOR_GET_ALL);
+	g_return_if_fail (data != NULL);
+
+	g_hash_table_insert ((GHashTable *) content_hash, GUINT_TO_POINTER (flag), content_hash_data_new (data, destroy_data));
+}
+
+void
+e_content_editor_util_take_content_data_images (EContentEditorContentHash *content_hash,
+						GSList *image_parts) /* CamelMimePart * */
+{
+	g_return_if_fail (content_hash != NULL);
+	g_return_if_fail (image_parts != NULL);
+
+	g_hash_table_insert ((GHashTable *) content_hash, GUINT_TO_POINTER (E_CONTENT_EDITOR_GET_INLINE_IMAGES),
+		content_hash_data_new (image_parts, content_data_free_obj_slist));
+}
+
+/* The actual data type depends on the @flag. The E_CONTENT_EDITOR_GET_INLINE_IMAGES returns
+   a GSList of CamelMimePart-s of inline images. All the other flags return plain strings.
+
+   The returned pointer is owned by content_hash and cannot be freed
+   neither modified. It's freed together with the content_hash, or
+   when its key is overwritten.
+ */
+gpointer
+e_content_editor_util_get_content_data (EContentEditorContentHash *content_hash,
+					EContentEditorGetContentFlags flag)
+{
+	ContentHashData *chd;
+
+	g_return_val_if_fail (content_hash != NULL, NULL);
+	g_return_val_if_fail (flag != E_CONTENT_EDITOR_GET_ALL, NULL);
+
+	chd = g_hash_table_lookup ((GHashTable *) content_hash, GUINT_TO_POINTER (flag));
+
+	return chd ? chd->data : NULL;
+}
+
+/* The same rules apply as with e_content_editor_util_get_content_data(). The difference is
+   that after calling this function the data is stoled from the content_hash and the caller
+   is responsible to free it. Any following calls with the same flag will return %NULL.
+ */
+gpointer
+e_content_editor_util_steal_content_data (EContentEditorContentHash *content_hash,
+					  EContentEditorGetContentFlags flag,
+					  GDestroyNotify *out_destroy_data)
+{
+	ContentHashData *chd;
+	gpointer data;
+
+	if (out_destroy_data)
+		*out_destroy_data = NULL;
+
+	g_return_val_if_fail (content_hash != NULL, NULL);
+	g_return_val_if_fail (flag != E_CONTENT_EDITOR_GET_ALL, NULL);
+
+	chd = g_hash_table_lookup ((GHashTable *) content_hash, GUINT_TO_POINTER (flag));
+
+	if (!chd)
+		return NULL;
+
+	data = chd->data;
+
+	if (out_destroy_data)
+		*out_destroy_data = chd->destroy_data;
+
+	chd->data = NULL;
+	chd->destroy_data = NULL;
+
+	return data;
+}
+
+/**
+ * e_content_editor_util_create_data_mimepart:
+ * @uri: a file:// or data: URI of the data to convert to MIME part
+ * @cid: content ID to use for the MIME part, should start with "cid:"; can be %NULL
+ * @as_inline: whether to use "inline" content disposition; will use "attachment", if set to %FALSE
+ * @prefer_filename: preferred file name to use, can be %NULL
+ * @prefer_mime_type: preferred MIME type for the part, can be %NULL
+ * @cancellable: optional #GCancellable object, or %NULL
+ *
+ * Converts URI into a #CamelMimePart. Supports file:// and data: URIs.
+ * The @prefer_filename can override the file name from the @uri.
+ *
+ * Free the returned pointer, if not %NULL, with g_object_unref(), when
+ * no longer needed.
+ *
+ * Returns: (transfer full) (nullable): a new #CamelMimePart containing
+ *    the referenced data, or %NULL, when cannot be converted (due to
+ *    unsupported URI, file not found or such).
+ *
+ * Since: 3.36
+ **/
+CamelMimePart *
+e_content_editor_util_create_data_mimepart (const gchar *uri,
+					    const gchar *cid,
+					    gboolean as_inline,
+					    const gchar *prefer_filename,
+					    const gchar *prefer_mime_type,
+					    GCancellable *cancellable)
+{
+	CamelMimePart *mime_part = NULL;
+	GInputStream *input_stream = NULL;
+	GFileInfo *file_info = NULL;
+	gchar *mime_type = NULL;
+	guchar *data = NULL;
+	gsize data_length = 0;
+
+	g_return_val_if_fail (uri != NULL, NULL);
+
+	/* base64-encoded "data:" URIs */
+	if (g_ascii_strncasecmp (uri, "data:", 5) == 0) {
+		/* data:[<mime type>][;charset=<charset>][;base64],<encoded data> */
+		const gchar *ptr, *from;
+		gboolean is_base64 = FALSE;
+
+		ptr = uri + 5;
+		from = ptr;
+		while (*ptr && *ptr != ',') {
+			ptr++;
+
+			if (*ptr == ',' || *ptr == ';') {
+				if (g_ascii_strncasecmp (from, "base64", ptr - from) == 0)
+					is_base64 = TRUE;
+
+				if (from == uri + 5 && *ptr == ';' && !prefer_mime_type)
+					mime_type = g_strndup (from, ptr - from);
+
+				from = ptr + 1;
+			}
+		}
+
+		if (is_base64 && *ptr == ',') {
+			data = g_base64_decode (ptr + 1, &data_length);
+
+			if (data && data_length && !mime_type && !prefer_mime_type) {
+				gchar *content_type;
+
+				content_type = g_content_type_guess (NULL, data, data_length, NULL);
+
+				if (content_type) {
+					mime_type = g_content_type_get_mime_type (content_type);
+					g_free (content_type);
+				}
+			}
+		}
+
+	/* files on the disk */
+	} else if (g_ascii_strncasecmp (uri, "file://", 7) == 0) {
+		GFileInputStream *file_stream;
+		GFile *file;
+
+		file = g_file_new_for_uri (uri);
+		file_stream = g_file_read (file, NULL, NULL);
+		g_clear_object (&file);
+
+		if (file_stream) {
+			if (!prefer_filename) {
+				file_info = g_file_input_stream_query_info (file_stream, G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME, cancellable, NULL);
+
+				if (file_info) {
+					prefer_filename = g_file_info_get_display_name (file_info);
+				}
+			}
+
+			if (!prefer_mime_type)
+				mime_type = e_util_guess_mime_type (uri, TRUE);
+
+			input_stream = (GInputStream *) file_stream;
+		}
+	}
+
+	if (data || input_stream) {
+		if (!prefer_mime_type)
+			prefer_mime_type = mime_type;
+
+		if (!prefer_mime_type)
+			prefer_mime_type = "application/octet-stream";
+
+		if (input_stream) {
+			CamelDataWrapper *wrapper;
+
+			wrapper = camel_data_wrapper_new ();
+
+			if (camel_data_wrapper_construct_from_input_stream_sync (wrapper, input_stream, cancellable, NULL)) {
+				camel_data_wrapper_set_mime_type (wrapper, prefer_mime_type);
+
+				mime_part = camel_mime_part_new ();
+				camel_medium_set_content (CAMEL_MEDIUM (mime_part), wrapper);
+			}
+
+			g_object_unref (wrapper);
+		} else {
+			mime_part = camel_mime_part_new ();
+			camel_mime_part_set_content (mime_part, (const gchar *) data, data_length, prefer_mime_type);
+		}
+
+		if (mime_part) {
+			camel_mime_part_set_disposition (mime_part, as_inline ? "inline" : "attachment");
+
+			if (cid)
+				camel_mime_part_set_content_id (mime_part, cid);
+
+			if (prefer_filename && *prefer_filename)
+				camel_mime_part_set_filename (mime_part, prefer_filename);
+
+			camel_mime_part_set_encoding (mime_part, CAMEL_TRANSFER_ENCODING_BASE64);
+		}
+	}
+
+	g_clear_object (&input_stream);
+	g_clear_object (&file_info);
+	g_free (mime_type);
+	g_free (data);
+
+	return mime_part;
 }
 
 void
@@ -2119,32 +2439,39 @@ e_content_editor_selection_wrap (EContentEditor *editor)
 	iface->selection_wrap (editor);
 }
 
-guint
-e_content_editor_get_caret_position (EContentEditor *editor)
+void
+e_content_editor_get_caret_position (EContentEditor *editor,
+				     GCancellable *cancellable,
+				     GAsyncReadyCallback callback,
+				     gpointer user_data)
 {
 	EContentEditorInterface *iface;
 
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), 0);
+	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_val_if_fail (iface != NULL, 0);
-	g_return_val_if_fail (iface->get_caret_position != NULL, 0);
+	g_return_if_fail (iface != NULL);
+	g_return_if_fail (iface->get_caret_position != NULL);
 
-	return iface->get_caret_position (editor);
+	iface->get_caret_position (editor, cancellable, callback, user_data);
 }
 
-guint
-e_content_editor_get_caret_offset (EContentEditor *editor)
+gboolean
+e_content_editor_get_caret_position_finish (EContentEditor *editor,
+					    GAsyncResult *result,
+					    guint *out_position,
+					    guint *out_offset,
+					    GError **error)
 {
 	EContentEditorInterface *iface;
 
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), 0);
+	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_val_if_fail (iface != NULL, 0);
-	g_return_val_if_fail (iface->get_caret_offset != NULL, 0);
+	g_return_val_if_fail (iface != NULL, FALSE);
+	g_return_val_if_fail (iface->get_caret_position_finish != NULL, FALSE);
 
-	return iface->get_caret_offset (editor);
+	return iface->get_caret_position_finish (editor, result, out_position, out_offset, error);
 }
 
 gchar *

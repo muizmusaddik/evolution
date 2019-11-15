@@ -164,22 +164,29 @@ typedef enum {
 
 /**
  * EContentEditorGetContentFlags:
- * @E_CONTENT_EDITOR_GET_BODY:
- * @E_CONTENT_EDITOR_GET_INLINE_IMAGES:
- * @E_CONTENT_EDITOR_GET_PROCESSED: raw or processed
- * @E_CONTENT_EDITOR_GET_TEXT_HTML:
- * @E_CONTENT_EDITOR_GET_TEXT_PLAIN:
- * @E_CONTENT_EDITOR_GET_EXCLUDE_SIGNATURE:
+ * @E_CONTENT_EDITOR_GET_INLINE_IMAGES: Return also list of inline images
+ * @E_CONTENT_EDITOR_GET_RAW_BODY_HTML: text/html version of the body only, as used by the editor
+ * @E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN: text/plain version of the body only, as used by the editor
+ * @E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED: text/plain version of the body only, without signature, quoted text and such
+ * @E_CONTENT_EDITOR_GET_RAW_DRAFT: a version of the content, to use as draft message
+ * @E_CONTENT_EDITOR_GET_TO_SEND_HTML: text/html version of the content, suitable to be sent
+ * @E_CONTENT_EDITOR_GET_TO_SEND_PLAIN:	text/plain version of the content, suitable to be sent
+ * @E_CONTENT_EDITOR_GET_ALL: a shortcut for all flags
  *
- * Since: 3.22
+ * Influences what content should be returned. Each flag means one
+ * version, or part, of the content.
+ *
+ * Since: 3.36
  **/
 typedef enum {
-	E_CONTENT_EDITOR_GET_BODY		= 1 << 0,
-	E_CONTENT_EDITOR_GET_INLINE_IMAGES	= 1 << 1,
-	E_CONTENT_EDITOR_GET_PROCESSED		= 1 << 2, /* raw or processed */
-	E_CONTENT_EDITOR_GET_TEXT_HTML		= 1 << 3,
-	E_CONTENT_EDITOR_GET_TEXT_PLAIN		= 1 << 4,
-	E_CONTENT_EDITOR_GET_EXCLUDE_SIGNATURE	= 1 << 5
+	E_CONTENT_EDITOR_GET_INLINE_IMAGES	= 1 << 0,
+	E_CONTENT_EDITOR_GET_RAW_BODY_HTML	= 1 << 1,
+	E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN	= 1 << 2,
+	E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED	= 1 << 3,
+	E_CONTENT_EDITOR_GET_RAW_DRAFT		= 1 << 4,
+	E_CONTENT_EDITOR_GET_TO_SEND_HTML	= 1 << 5,
+	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN	= 1 << 6,
+	E_CONTENT_EDITOR_GET_ALL		= ~0
 } EContentEditorGetContentFlags;
 
 /**
