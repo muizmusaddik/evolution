@@ -421,12 +421,12 @@ Evo.getElementContent = function(node, format, useOuterHTML)
 	var data;
 
 	if (format == 1) {
-		data = EvoConvertToPlainText(node);
+		data = EvoConvert.ToPlainText(node);
 	} else if (format == 2) {
 		data = useOuterHTML ? node.outerHTML : node.innerHTML;
 	} else if (format == 3) {
 		data = {};
-		data["plain"] = EvoConvertToPlainText(node);
+		data["plain"] = EvoConvert.ToPlainText(node);
 		data["html"] = useOuterHTML ? node.outerHTML : node.innerHTML;
 	}
 

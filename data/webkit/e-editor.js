@@ -56,6 +56,7 @@ var EvoEditor = {
 	CLAIM_CONTENT_FLAG_SAVE_HTML : 1 << 1,
 
 	TEXT_INDENT_SIZE : 3, // in characters
+	NORMAL_PARAGRAPH_WIDTH : 71,
 
 	FORCE_NO : 0,
 	FORCE_YES : 1,
@@ -1205,6 +1206,78 @@ EvoEditor.initializeContent = function()
 	}
 }
 
+EvoEditor.convertParagraphs = function(parent, wrapWidth)
+{
+	if (!parent)
+		return;
+
+	var ii;
+
+	for (ii = 0; ii < parent.children.length; ii++) {
+		var child = parent.children.item(ii);
+
+		if (child.tagName == "DIV") {
+			if (wrapWidth == -1) {
+				child.style.width = "";
+			} else {
+				child.style.width = wrapWidth + "ch";
+			}
+		} else if (child.tagName == "BLOCKQUOTE") {
+			var innerWrapWidth = wrapWidth;
+
+			innerWrapWidth -= 2; // length of "> "
+
+			if (innerWrapWidth < EvoConvert.MIN_PARAGRAPH_WIDTH)
+				innerWrapWidth = EvoConvert.MIN_PARAGRAPH_WIDTH;
+
+			EvoEditor.convertParagraphs(child, innerWrapWidth);
+		} else if (child.tagName == "UL") {
+			if (wrapWidth == -1) {
+				child.style.width = "";
+			} else {
+				var innerWrapWidth = wrapWidth;
+
+				innerWrapWidth -= 3; // length of " * " prefix
+
+				if (innerWrapWidth < EvoConvert.MIN_PARAGRAPH_WIDTH)
+					innerWrapWidth = EvoConvert.MIN_PARAGRAPH_WIDTH;
+
+				child.style.width = innerWrapWidth + "ch";
+			}
+		} else if (child.tagName == "OL") {
+			if (wrapWidth == -1) {
+				child.style.width = "";
+				child.style.paddingInlineStart = "";
+			} else {
+				var innerWrapWidth = wrapWidth, olNeedWidth;
+
+				olNeedWidth = EvoEditor.GetOLMaxLetters(child.getAttribute("type"), child.children.length) + 2; // length of ". " suffix
+
+				if (olNeedWidth < EvoConvert.MIN_OL_WIDTH)
+					olNeedWidth = EvoConvert.MIN_OL_WIDTH;
+
+				innerWrapWidth -= olNeedWidth;
+
+				if (innerWrapWidth < EvoConvert.MIN_PARAGRAPH_WIDTH)
+					innerWrapWidth = EvoConvert.MIN_PARAGRAPH_WIDTH;
+
+				child.style.width = innerWrapWidth + "ch";
+				child.style.paddingInlineStart = olNeedWidth + "ch";
+			}
+		}
+	}
+}
+
+EvoEditor.SetNormalParagraphWidth = function(value)
+{
+	if (EvoEditor.NORMAL_PARAGRAPH_WIDTH != value) {
+		EvoEditor.NORMAL_PARAGRAPH_WIDTH = value;
+
+		if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT)
+			EvoEditor.convertParagraphs(document.body, EvoEditor.NORMAL_PARAGRAPH_WIDTH);
+	}
+}
+
 EvoEditor.SetMode = function(mode)
 {
 	if (EvoEditor.mode != mode) {
@@ -1224,19 +1297,18 @@ EvoEditor.SetMode = function(mode)
 			}
 		}
 
-		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_DOCUMENT, opType);
-
 		EvoUndoRedo.Disable();
 		try {
 			EvoEditor.mode = mode;
 
 			if (mode == EvoEditor.MODE_PLAIN_TEXT) {
-				// TODO convert HTML to "rich" plain-text
+				EvoEditor.convertParagraphs(document.body, EvoEditor.NORMAL_PARAGRAPH_WIDTH);
 			} else {
-				// TODO convert plain to HTML
+				EvoEditor.convertParagraphs(document.body, -1);
 			}
 		} finally {
 			EvoUndoRedo.Enable();
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_DOCUMENT, opType);
 		}
 	}
 }
@@ -1356,7 +1428,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 			content_data["to-send-html"] = EvoEditor.convertHtmlToSend();
 
 		if ((flags & EvoEditor.	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN) != 0) {
-			content_data["to-send-plain"] = EvoConvertToPlainText(document.body);
+			content_data["to-send-plain"] = EvoConvert.ToPlainText(document.body);
 		}
 	} finally {
 		try {

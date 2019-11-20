@@ -1415,6 +1415,7 @@ test_selection (TestFixture *fixture)
 		"<font color=\"red\">R</font>"
 		"<font color=\"green\">G</font>"
 		"<font color=\"blue\">B</font>"
+		"<span id=\"rgb-end\"></span>"
 		"</div>"
 		"<div id=\"styled\">"
 		"<span style=\"color:blue;\">bb</span>"
@@ -1444,16 +1445,23 @@ test_selection (TestFixture *fixture)
 	test_selection_select_in_iframe (fixture, "frm1", "plain", "rgb");
 
 	g_assert_cmpint (e_web_view_has_selection (E_WEB_VIEW (fixture->web_view)) ? 1 : 0, ==, 1);
-	test_selection_verify (fixture, "unformatted text\n", NULL);
+	test_selection_verify (fixture, "unformatted text\n\n", NULL);
 	test_selection_verify (fixture, NULL, "<div id=\"plain\">unformatted text</div><br><div id=\"rgb\"></div>");
-	test_selection_verify (fixture, "unformatted text\n", "<div id=\"plain\">unformatted text</div><br><div id=\"rgb\"></div>");
+	test_selection_verify (fixture, "unformatted text\n\n", "<div id=\"plain\">unformatted text</div><br><div id=\"rgb\"></div>");
 
 	test_selection_select_in_iframe (fixture, "frm1", "rgb", "styled");
 
 	g_assert_cmpint (e_web_view_has_selection (E_WEB_VIEW (fixture->web_view)) ? 1 : 0, ==, 1);
+	test_selection_verify (fixture, "RGB\n", NULL);
+	test_selection_verify (fixture, NULL, "<div id=\"rgb\"><font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font><span id=\"rgb-end\"></span></div><div id=\"styled\"></div>");
+	test_selection_verify (fixture, "RGB\n", "<div id=\"rgb\"><font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font><span id=\"rgb-end\"></span></div><div id=\"styled\"></div>");
+
+	test_selection_select_in_iframe (fixture, "frm1", "rgb", "rgb-end");
+
+	g_assert_cmpint (e_web_view_has_selection (E_WEB_VIEW (fixture->web_view)) ? 1 : 0, ==, 1);
 	test_selection_verify (fixture, "RGB", NULL);
-	test_selection_verify (fixture, NULL, "<div id=\"rgb\"><font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font></div><div id=\"styled\"></div>");
-	test_selection_verify (fixture, "RGB", "<div id=\"rgb\"><font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font></div><div id=\"styled\"></div>");
+	test_selection_verify (fixture, NULL, "<font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font>");
+	test_selection_verify (fixture, "RGB", "<font color=\"red\">R</font><font color=\"green\">G</font><font color=\"blue\">B</font>");
 
 	test_selection_select_in_iframe (fixture, "frm1", "styled", "end");
 
@@ -1683,6 +1691,7 @@ test_get_content (TestFixture *fixture)
 	test_get_element_content_verify (fixture, "frm1", "frst", TRUE, NULL, expect_html);
 	test_get_element_content_verify (fixture, "frm1", "frst", TRUE, expect_plain, expect_html);
 
+	expect_plain = "frm1 div\n";
 	test_get_element_content_verify (fixture, "frm1", "frm1p", FALSE, expect_plain, NULL);
 	test_get_element_content_verify (fixture, "frm1", "frm1p", FALSE, NULL, expect_html);
 	test_get_element_content_verify (fixture, "frm1", "frm1p", FALSE, expect_plain, expect_html);
@@ -1918,6 +1927,608 @@ test_get_element_from_point (TestFixture *fixture)
 	g_assert_cmpint (tested, >, 0);
 }
 
+static void
+test_convert_to_plain (TestFixture *fixture)
+{
+	#define HTML(_body) ("<html><head><style><!-- span.Apple-tab-span { white-space:pre; } --></style></head><body style='font-family:monospace;'>" _body "</body></html>")
+	#define TAB "<span class='Apple-tab-span' style='white-space:pre;'>\t</span>"
+	#define BREAK_STYLE " word-break:break-word; word-wrap:break-word; line-break:after-white-space;"
+	#define WRAP_STYLE(_type) " white-space:" _type "; " BREAK_STYLE
+	#define ALIGN_STYLE(_type) " text-align:" _type ";"
+	#define INDENT_STYLE(_type, _val) " margin-" _type ":" _val "ch;"
+	#define DIR_STYLE(_type) " direction:" _type ";"
+
+	struct _tests {
+		const gchar *html;
+		const gchar *plain;
+		gint normal_div_width;
+	} tests[] = {
+	/* 0 */	{ HTML ("<div style='width:10ch; " BREAK_STYLE "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678\n0123 5678\n0123 678\n1234567890\nabcdefghij\nklmnopq\n012345 356\n9\n0\n",
+		  -1 },
+	/* 1 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("normal") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678\n0123 5678\n0123 678\n1234567890\nabcdefghij\nklmnopq\n012345 356\n9\n0\n",
+		  -1 },
+	/* 2 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("nowrap") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678 0123 5678 0123 678 1234567890abcdefghijklmnopq 012345 356 9 0\n",
+		  -1 },
+	/* 3 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("pre") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678 0\n123 5678 0\n123  678 1\n234567890a\nbcdefghijk\nlmnopq 012\n345       \n  356  9  \n       \t\t\n0\n",
+		  -1 },
+	/* 4 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("pre") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9          " TAB TAB "0</div>"),
+		  "123 5678 0\n123 5678 0\n123  678 1\n234567890a\nbcdefghijk\nlmnopq 012\n345       \n  356  9  \n        \t\n\t0\n",
+		  -1 },
+	/* 5 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("pre-line") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678\n0123 5678\n0123 678\n1234567890\nabcdefghij\nklmnopq\n012345 356\n9\n0\n",
+		  -1 },
+	/* 6 */	{ HTML ("<div style='width:10ch; " WRAP_STYLE ("pre-wrap") "'>123 5678 0123 5678 0123  678 1234567890abcdefghijklmnopq 012345         356  9         " TAB TAB "0</div>"),
+		  "123 5678 \n0123 5678 \n0123  678 \n1234567890\nabcdefghij\nklmnopq \n012345    \n356  9    \n        \n        0\n",
+		  -1 },
+	/* 7 */	{ HTML ("<pre>123456789012345\n1\t90123\n123   78901\n  34567   <br>123 5</pre>"),
+		  "123456789012345\n1\t90123\n123   78901\n  34567   \n123 5\n",
+		  -1 },
+	/* 8 */	{ HTML ("<pre>123456789012345\n1\t90123\n123   78901\n  34567   <br>123 5</pre>"),
+		  "123456789012345\n1\t90123\n123   78901\n  34567   \n123 5\n",
+		  10 },
+	/* 9 */	{ HTML ("<h1>Header1</h1>"
+			"<div style='width:10ch; " WRAP_STYLE ("normal") "'>123456 789 123 4567890 123456 789 122</div>"
+			"<div style='width:10ch; " WRAP_STYLE ("normal") "'>987654321 987 654 321 12345678901234567890</div>"),
+		  "Header1\n\n"
+		  "123456 789\n123\n4567890\n123456 789\n122\n"
+		  "987654321\n987 654\n321\n1234567890\n1234567890\n",
+		  -1 },
+	/* 10 */{ HTML ("<h1>Header1</h1>"
+			"<div style='width:10ch; " WRAP_STYLE ("pre-wrap") "'>123456 789 123 4567890 123456 789 122</div>"
+			"<div style='width:10ch; " WRAP_STYLE ("pre-wrap") "'>987654321 987 654 321 12345678901234567890</div>"),
+		  "Header1\n\n"
+		  "123456 789\n123 \n4567890 \n123456 789\n122\n"
+		  "987654321 \n987 654 \n321 \n1234567890\n1234567890\n",
+		  -1 },
+	/* 11 */{ HTML ("<h1>H1</h1><h2>H2</h2><h3>H3</h3><h4>H4</h4><h5>H5</h5><h6>H6</h6>"),
+		  "H1\n\nH2\n\nH3\n\nH4\n\nH5\n\nH6\n\n",
+		  -1 },
+	/* 12 */{ HTML ("<address>Line 1<br>Line 2<br>Line 3 ...</address>"),
+		  "Line 1\nLine 2\nLine 3 ...\n",
+		  -1 },
+	/* 13 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>1 2 3 4 5 6</div>"),
+		  "1\n1 2\n1 2 3\n1 2 3 4\n1 2 3 4 5\n1 2 3 4 5\n6\n",
+		  -1 },
+	/* 14 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>1 2 3 4 5 6</div>"),
+		  "    1\n   1 2\n  1 2 3\n 1 2 3 4\n1 2 3 4 5\n1 2 3 4 5\n    6\n",
+		  -1 },
+	/* 15 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>1 2 3 4 5 6</div>"),
+		  "         1\n"
+		  "       1 2\n"
+		  "     1 2 3\n"
+		  "   1 2 3 4\n"
+		  " 1 2 3 4 5\n"
+		  " 1 2 3 4 5\n"
+		  "         6\n",
+		  -1 },
+	/* 16 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 aaaaaaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 2 aaaaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 2 3 aaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 2 3 4 aaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 2 3 4 5 a</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>1 2 3 4 5 6 7</div>"),
+		  "1\n"
+		  "aaaaaaaaa\n"
+		  "1        2\n"
+		  "aaaaaaa\n"
+		  "1    2   3\n"
+		  "aaaaa\n"
+		  "1  2  3  4\n"
+		  "aaa\n"
+		  "1  2 3 4 5\n"
+		  "a\n"
+		  "1  2 3 4 5\n"
+		  "6 7\n",
+		  -1 },
+	/* 17 */{ HTML ("<div style='width:10ch; " BREAK_STYLE "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n123\n4567890\n123456 789\n122\n",
+		  -1 },
+	/* 18 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n123\n4567890\n123456 789\n122\n",
+		  -1 },
+	/* 19 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n"
+		  "   123\n"
+		  " 4567890\n"
+		  "123456 789\n"
+		  "   122\n",
+		  -1 },
+	/* 20 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n"
+		  "       123\n"
+		  "   4567890\n"
+		  "123456 789\n"
+		  "       122\n",
+		  -1 },
+	/* 21 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") "'>123456 789 1 3 456 890 1234 789 1 2 3 4 5 122</div>"),
+		  "123456 789\n"
+		  "1   3  456\n"
+		  "890   1234\n"
+		  "789  1 2 3\n"
+		  "4 5 122\n",
+		  -1 },
+	/* 22 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>1 2 3 4 5 6</div>"),
+		  "1         \n"
+		  "1 2       \n"
+		  "1 2 3     \n"
+		  "1 2 3 4   \n"
+		  "1 2 3 4 5 \n"
+		  "1 2 3 4 5 \n"
+		  "6         \n",
+		  -1 },
+	/* 23 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>1 2 3 4 5 6</div>"),
+		  "1    \n1 2   \n1 2 3  \n1 2 3 4 \n1 2 3 4 5\n1 2 3 4 5\n6    \n",
+		  -1 },
+	/* 24 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1 2</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1 2 3</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1 2 3 4</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1 2 3 4 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>1 2 3 4 5 6</div>"),
+		  "1\n1 2\n1 2 3\n1 2 3 4\n1 2 3 4 5\n1 2 3 4 5\n6\n",
+		  -1 },
+	/* 25 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 aaaaaaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 2 aaaaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 2 3 aaaaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 2 3 4 aaa</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 2 3 4 5 a</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>1 2 3 4 5 6 7</div>"),
+		  "1\n"
+		  "aaaaaaaaa\n"
+		  "1        2\n"
+		  "aaaaaaa\n"
+		  "1    2   3\n"
+		  "aaaaa\n"
+		  "1  2  3  4\n"
+		  "aaa\n"
+		  "1  2 3 4 5\n"
+		  "a\n"
+		  "1  2 3 4 5\n"
+		  "6 7\n",
+		  -1 },
+	/* 26 */{ HTML ("<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n"
+		  "123\n"
+		  "4567890\n"
+		  "123456 789\n"
+		  "122\n",
+		  -1 },
+	/* 27 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") DIR_STYLE ("rtl") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n"
+		  "123       \n"
+		  "4567890   \n"
+		  "123456 789\n"
+		  "122       \n",
+		  -1 },
+	/* 28 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") DIR_STYLE ("rtl") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n"
+		  "123   \n"
+		  "4567890 \n"
+		  "123456 789\n"
+		  "122   \n",
+		  -1 },
+	/* 29 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("right") DIR_STYLE ("rtl") "'>123456 789 123 4567890 123456 789 122</div>"),
+		  "123456 789\n123\n4567890\n123456 789\n122\n",
+		  -1 },
+	/* 30 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") DIR_STYLE ("rtl") "'>123456 789 1 3 456 890 1234 789 1 2 3 4 5 122</div>"),
+		  "123456 789\n"
+		  "1   3  456\n"
+		  "890   1234\n"
+		  "789  1 2 3\n"
+		  "4 5 122\n",
+		  -1 },
+	/* 31 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") INDENT_STYLE ("left", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") INDENT_STYLE ("left", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("left") INDENT_STYLE ("left", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "   123 567\n"
+		  "   901 345\n"
+		  "   789 123 5\n"
+		  "      987 543\n"
+		  "      109 765\n"
+		  "      321 098 6\n"
+		  "   111 222\n"
+		  "   333 444\n"
+		  "   555 666 7\n",
+		  -1 },
+	/* 32 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") INDENT_STYLE ("left", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") INDENT_STYLE ("left", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("center") INDENT_STYLE ("left", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "    123 567\n"
+		  "    901 345\n"
+		  "   789 123 5\n"
+		  "       987 543\n"
+		  "       109 765\n"
+		  "      321 098 6\n"
+		  "    111 222\n"
+		  "    333 444\n"
+		  "   555 666 7\n",
+		  -1 },
+	/* 33 */{ HTML ("<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") INDENT_STYLE ("right", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") INDENT_STYLE ("right", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") INDENT_STYLE ("right", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "123 567   \n"
+		  "901 345   \n"
+		  "789 123 5   \n"
+		  "987 543      \n"
+		  "109 765      \n"
+		  "321 098 6      \n"
+		  "111 222   \n"
+		  "333 444   \n"
+		  "555 666 7   \n",
+		  -1 },
+	/* 34 */{ HTML ("<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("ltr") ALIGN_STYLE ("right") INDENT_STYLE ("left", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("ltr") ALIGN_STYLE ("right") INDENT_STYLE ("left", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("ltr") ALIGN_STYLE ("right") INDENT_STYLE ("left", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "   123 567\n"
+		  "   901 345\n"
+		  " 789 123 5\n"
+		  "   987 543\n"
+		  "   109 765\n"
+		  " 321 098 6\n"
+		  "   111 222\n"
+		  "   333 444\n"
+		  " 555 666 7\n",
+		  -1 },
+	/* 35 */{ HTML ("<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") ALIGN_STYLE ("left") INDENT_STYLE ("right", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") ALIGN_STYLE ("left") INDENT_STYLE ("right", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE DIR_STYLE ("rtl") ALIGN_STYLE ("left") INDENT_STYLE ("right", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "123 567   \n"
+		  "901 345   \n"
+		  "789 123 5 \n"
+		  "987 543   \n"
+		  "109 765   \n"
+		  "321 098 6 \n"
+		  "111 222   \n"
+		  "333 444   \n"
+		  "555 666 7 \n",
+		  -1 },
+	/* 36 */{ HTML ("<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") INDENT_STYLE ("left", "3") "'>123 567 901 345 789 123 5</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") INDENT_STYLE ("left", "6") "'>987 543 109 765 321 098 6</div>"
+			"<div style='width:10ch; " BREAK_STYLE ALIGN_STYLE ("justify") INDENT_STYLE ("left", "3") "'>111 222 333 444 555 666 7</div>"),
+		  "   123    567\n"
+		  "   901    345\n"
+		  "   789 123 5\n"
+		  "      987    543\n"
+		  "      109    765\n"
+		  "      321 098 6\n"
+		  "   111    222\n"
+		  "   333    444\n"
+		  "   555 666 7\n",
+		  -1 },
+	/* 37 */{ HTML ("<ul style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ul>"),
+		  " * 1 11 111\n"
+		  "   1111 111\n"
+		  "   11 1\n"
+		  " * 2 22 222\n"
+		  "   2222 222\n"
+		  "   22 2\n"
+		  " * 3 33 333\n"
+		  "   3333\n"
+		  "   33333 333\n"
+		  "   33 3\n",
+		  -1 },
+	/* 38 */{ HTML ("<ol style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ol>"),
+		  "   1. 1 11 111\n"
+		  "      1111 111\n"
+		  "      11 1\n"
+		  "   2. 2 22 222\n"
+		  "      2222 222\n"
+		  "      22 2\n"
+		  "   3. 3 33 333\n"
+		  "      3333\n"
+		  "      33333 333\n"
+		  "      33 3\n",
+		  -1 },
+	/* 39 */{ HTML ("<ol type='A' style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ol>"),
+		  "   A. 1 11 111\n"
+		  "      1111 111\n"
+		  "      11 1\n"
+		  "   B. 2 22 222\n"
+		  "      2222 222\n"
+		  "      22 2\n"
+		  "   C. 3 33 333\n"
+		  "      3333\n"
+		  "      33333 333\n"
+		  "      33 3\n",
+		  -1 },
+	/* 40 */{ HTML ("<ol type='a' style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ol>"),
+		  "   a. 1 11 111\n"
+		  "      1111 111\n"
+		  "      11 1\n"
+		  "   b. 2 22 222\n"
+		  "      2222 222\n"
+		  "      22 2\n"
+		  "   c. 3 33 333\n"
+		  "      3333\n"
+		  "      33333 333\n"
+		  "      33 3\n",
+		  -1 },
+	/* 41 */{ HTML ("<ol type='I' style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ol>"),
+		  "   I. 1 11 111\n"
+		  "      1111 111\n"
+		  "      11 1\n"
+		  "  II. 2 22 222\n"
+		  "      2222 222\n"
+		  "      22 2\n"
+		  " III. 3 33 333\n"
+		  "      3333\n"
+		  "      33333 333\n"
+		  "      33 3\n",
+		  -1 },
+	/* 42 */{ HTML ("<ol type='i' style='width: 9ch;'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"</ol>"),
+		  "   i. 1 11 111\n"
+		  "      1111 111\n"
+		  "      11 1\n"
+		  "  ii. 2 22 222\n"
+		  "      2222 222\n"
+		  "      22 2\n"
+		  " iii. 3 33 333\n"
+		  "      3333\n"
+		  "      33333 333\n"
+		  "      33 3\n",
+		  -1 },
+	/* 43 */{ HTML ("<ol type='i' style='width: 9ch;'>"
+			"<li>1</li>"
+			"<li>2</li>"
+			"<li>3</li>"
+			"<li>4</li>"
+			"<li>5</li>"
+			"<li>6</li>"
+			"<li>7</li>"
+			"<li>8</li>"
+			"<li>9</li>"
+			"<li>10</li>"
+			"<li>11</li>"
+			"<li>12</li>"
+			"<li>13</li>"
+			"<li>14</li>"
+			"<li>15</li>"
+			"<li>16</li>"
+			"<li>17</li>"
+			"<li>18</li>"
+			"<li>19</li>"
+			"<li>20</li>"
+			"</ol>"),
+		  "    i. 1\n"
+		  "   ii. 2\n"
+		  "  iii. 3\n"
+		  "   iv. 4\n"
+		  "    v. 5\n"
+		  "   vi. 6\n"
+		  "  vii. 7\n"
+		  " viii. 8\n"
+		  "   ix. 9\n"
+		  "    x. 10\n"
+		  "   xi. 11\n"
+		  "  xii. 12\n"
+		  " xiii. 13\n"
+		  "  xiv. 14\n"
+		  "   xv. 15\n"
+		  "  xvi. 16\n"
+		  " xvii. 17\n"
+		  "xviii. 18\n"
+		  "  xix. 19\n"
+		  "   xx. 20\n",
+		  -1 },
+	/* 44 */{ HTML ("<ol style='width: 9ch; " DIR_STYLE ("rtl") "'>"
+			"<li>1 11 111 1111 111 11 1</li>"
+			"<li>2 22 222 2222 222 22 2</li>"
+			"<li>3 33 333 3333 33333 333 33 3</li>"
+			"<li>4</li>"
+			"</ol>"),
+		  "1 11 111 .1   \n"
+		  "1111 111      \n"
+		  "11 1      \n"
+		  "2 22 222 .2   \n"
+		  "2222 222      \n"
+		  "22 2      \n"
+		  "3 33 333 .3   \n"
+		  "3333      \n"
+		  "33333 333      \n"
+		  "33 3      \n"
+		  "4 .4   \n",
+		  -1 },
+	/* 45 */{ HTML ("<ol type='I' style='width: 9ch; " DIR_STYLE ("rtl") "'>"
+			"<li>1</li>"
+			"<li>2</li>"
+			"<li>3</li>"
+			"<li>4</li>"
+			"<li>5</li>"
+			"<li>6</li>"
+			"<li>7</li>"
+			"<li>8</li>"
+			"<li>9</li>"
+			"<li>10</li>"
+			"<li>11</li>"
+			"<li>12</li>"
+			"<li>13</li>"
+			"<li>14</li>"
+			"<li>15</li>"
+			"<li>16</li>"
+			"<li>17</li>"
+			"<li>18</li>"
+			"<li>19</li>"
+			"<li>20</li>"
+			"</ol>"),
+		  "1 .I    \n"
+		  "2 .II   \n"
+		  "3 .III  \n"
+		  "4 .IV   \n"
+		  "5 .V    \n"
+		  "6 .VI   \n"
+		  "7 .VII  \n"
+		  "8 .VIII \n"
+		  "9 .IX   \n"
+		  "10 .X    \n"
+		  "11 .XI   \n"
+		  "12 .XII  \n"
+		  "13 .XIII \n"
+		  "14 .XIV  \n"
+		  "15 .XV   \n"
+		  "16 .XVI  \n"
+		  "17 .XVII \n"
+		  "18 .XVIII\n"
+		  "19 .XIX  \n"
+		  "20 .XX   \n",
+		  -1 },
+	/* 46 */{ HTML ("<ul style='width: 15ch; padding-inline-start: 3ch;'>"
+			"<li>AA 1 2 3 4 5 6 7 8 9 11 22 33</li>"
+			"<ul style='width: 12ch; padding-inline-start: 3ch;'>"
+			"<li>BA 1 2 3 4 5 6 7 8 9</li>"
+			"<li>BB 1 2 3 4 5 6 7 8 9</li>"
+			"<ul style='width: 9ch; padding-inline-start: 3ch;'>"
+			"<li>CA 1 2 3 4 5 6</li>"
+			"<li>CB 1 2 3 4 5 6</li>"
+			"</ul>"
+			"<li>BC 1 2 3 4 5 6</li>"
+			"</ul>"
+			"<li>AB 1 2 3 4 5 6 7</li>"
+			"</ul>"),
+		  " * AA 1 2 3 4 5 6\n"
+		  "   7 8 9 11 22 33\n"
+		  "    # BA 1 2 3 4 5\n"
+		  "      6 7 8 9\n"
+		  "    # BB 1 2 3 4 5\n"
+		  "      6 7 8 9\n"
+		  "       * CA 1 2 3\n"
+		  "         4 5 6\n"
+		  "       * CB 1 2 3\n"
+		  "         4 5 6\n"
+		  "    # BC 1 2 3 4 5\n"
+		  "      6\n"
+		  " * AB 1 2 3 4 5 6\n"
+		  "   7\n",
+		  -1 },
+	/* 47 */{ HTML ("<ol>"
+			  "<li>1</li>"
+			  "<ul>"
+			    "<li>1.#</li>"
+			    "<ol type='i'>"
+			      "<li>1.#.i</li>"
+			      "<ol type='a'>"
+			        "<li>1.#.i.a</li>"
+			        "<li>1.#.i.b</li>"
+			      "</ol>"
+			      "<li>1.#.ii</li>"
+			      "<ol type='A'>"
+			        "<li>1.#.ii.A</li>"
+			        "<ul>"
+			          "<li>1.#.ii.A.*</li>"
+			          "<ul>"
+			            "<li>1.#.ii.A.*.#</li>"
+				       "<ol type='I'>"
+			                  "<li>1.#.ii.A.*.#.I</li>"
+			                  "<li>1.#.ii.A.*.#.II</li>"
+			                  "<li>1.#.ii.A.*.#.III</li>"
+				       "</ol>"
+			            "<li>1.#.ii.A.*.#</li>"
+			          "</ul>"
+			          "<li>1.#.ii.A.*</li>"
+			        "</ul>"
+			        "<li>1.#.ii.B</li>"
+			      "</ol>"
+			      "<li>1.#.iii</li>"
+			    "</ol>"
+			    "<li>1.#</li>"
+			  "</ul>"
+			  "<li>2</li>"
+			"</ol>"),
+		  "   1. 1\n"
+		  "       # 1.#\n"
+		  "         i. 1.#.i\n"
+		  "               a. 1.#.i.a\n"
+		  "               b. 1.#.i.b\n"
+		  "        ii. 1.#.ii\n"
+		  "               A. 1.#.ii.A\n"
+		  "                   * 1.#.ii.A.*\n"
+		  "                      # 1.#.ii.A.*.#\n"
+		  "                     I. 1.#.ii.A.*.#.I\n"
+		  "                    II. 1.#.ii.A.*.#.II\n"
+		  "                   III. 1.#.ii.A.*.#.III\n"
+		  "                      # 1.#.ii.A.*.#\n"
+		  "                   * 1.#.ii.A.*\n"
+		  "               B. 1.#.ii.B\n"
+		  "       iii. 1.#.iii\n"
+		  "       # 1.#\n"
+		  "   2. 2\n",
+		  -1 }
+	};
+
+	#undef HTML
+	#undef TAB
+	#undef BREAK_STYLE
+	#undef WRAP_STYLE
+	#undef ALIGN_STYLE
+	#undef INDENT_STYLE
+	#undef DIR_STYLE
+
+	gchar *script;
+	gint ii;
+
+	for (ii = 0; ii < G_N_ELEMENTS (tests); ii++) {
+		test_utils_load_string (fixture, tests[ii].html);
+
+		script = e_web_view_jsc_printf_script ("EvoConvert.ToPlainText(document.body, %d);", tests[ii].normal_div_width);
+
+		test_utils_jsc_call_string_and_verify (fixture, script, tests[ii].plain);
+
+		g_free (script);
+	}
+}
+
 gint
 main (gint argc,
       gchar *argv[])
@@ -1948,6 +2559,7 @@ main (gint argc,
 	test_utils_add_test ("/EWebView/Selection", test_selection);
 	test_utils_add_test ("/EWebView/GetContent", test_get_content);
 	test_utils_add_test ("/EWebView/GetElementFromPoint", test_get_element_from_point);
+	test_utils_add_test ("/EWebView/ConvertToPlain", test_convert_to_plain);
 
 	res = g_test_run ();
 
