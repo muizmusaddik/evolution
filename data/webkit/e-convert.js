@@ -189,8 +189,15 @@ EvoConvert.replaceList = function(element, tagName)
 			if (!type)
 				type = "";
 
+			var nChildren = 0, child;
+			for (ii = 0; ii < list.children.length; ii++) {
+				child = list.children.item(ii);
+				if (child.tagName == "LI")
+					nChildren++;
+			}
+
 			prefixSuffix = ltr ? ". " : " .";
-			indent = EvoConvert.GetOLMaxLetters(type, list.children.length) + prefixSuffix.length;
+			indent = EvoConvert.GetOLMaxLetters(type, nChildren) + prefixSuffix.length;
 			if (indent < EvoConvert.MIN_OL_WIDTH)
 				indent = EvoConvert.MIN_OL_WIDTH;
 		}
