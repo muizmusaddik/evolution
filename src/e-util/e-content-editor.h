@@ -101,8 +101,6 @@ struct _EContentEditorInterface {
 	void		(*set_spell_checking_languages)	(EContentEditor *editor,
 							 const gchar **languages);
 
-	gchar *		(*get_selected_text)		(EContentEditor *editor);
-
 	gchar *		(*get_caret_word)		(EContentEditor *editor);
 
 	void		(*replace_caret_word)		(EContentEditor *editor,
@@ -113,9 +111,6 @@ struct _EContentEditorInterface {
 	void		(*selection_indent)		(EContentEditor *editor);
 
 	void		(*selection_unindent)		(EContentEditor *editor);
-
-	void		(*selection_create_link)	(EContentEditor *editor,
-							 const gchar *uri);
 
 	void		(*selection_unlink)		(EContentEditor *editor);
 
@@ -442,6 +437,13 @@ struct _EContentEditorInterface {
 
 	void		(*on_find_dialog_close)		(EContentEditor *editor);
 
+	void		(*resource_loaded)		(EContentEditor *editor,
+							 const gchar *uri,
+							 GInputStream *stream,
+							 gint64 stream_length,
+							 const gchar *mime_type,
+							 const GError *error);
+
 	/* Signals */
 	void		(*load_finished)		(EContentEditor *editor);
 	gboolean	(*paste_clipboard)		(EContentEditor *editor);
@@ -455,6 +457,9 @@ struct _EContentEditorInterface {
 							 guint replaced_count);
 	void		(*drop_handled)			(EContentEditor *editor);
 	void		(*content_changed)		(EContentEditor *editor);
+	void		(*request_resource)		(EContentEditor *editor,
+							 const gchar *uri,
+							 GCancellable *cancellable);
 };
 
 /* Properties */
@@ -639,9 +644,6 @@ void		e_content_editor_set_spell_checking_languages
 
 void		e_content_editor_select_all	(EContentEditor *editor);
 
-gchar *		e_content_editor_get_selected_text
-						(EContentEditor *editor);
-
 gchar *		e_content_editor_get_caret_word	(EContentEditor *editor);
 
 void		e_content_editor_replace_caret_word
@@ -653,10 +655,6 @@ void		e_content_editor_selection_indent
 
 void		e_content_editor_selection_unindent
 						(EContentEditor *editor);
-
-void		e_content_editor_selection_create_link
-						(EContentEditor *editor,
-						 const gchar *uri);
 
 void		e_content_editor_selection_unlink
 						(EContentEditor *editor);
@@ -1080,6 +1078,13 @@ void		e_content_editor_on_find_dialog_open
 void		e_content_editor_on_find_dialog_close
 						(EContentEditor *editor);
 
+void		e_content_editor_resource_loaded(EContentEditor *editor,
+						 const gchar *uri,
+						 GInputStream *stream,
+						 gint64 stream_length,
+						 const gchar *mime_type,
+						 const GError *error);
+
 /* Signal helpers */
 
 void		e_content_editor_emit_load_finished
@@ -1101,6 +1106,10 @@ void		e_content_editor_emit_drop_handled
 						(EContentEditor *editor);
 void		e_content_editor_emit_content_changed
 						(EContentEditor *editor);
+void		e_content_editor_emit_request_resource
+						(EContentEditor *editor,
+						 const gchar *uri,
+						 GCancellable *cancellable);
 
 G_END_DECLS
 

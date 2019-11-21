@@ -90,7 +90,6 @@ struct _EWebKitEditorPrivate {
 	gboolean copy_cut_actions_triggered;
 	gboolean pasting_primary_clipboard;
 	gboolean pasting_from_itself_extension_value;
-	gboolean suppress_color_changes;
 
 	guint32 style_flags;
 	guint32 temporary_style_flags; /* that's for collapsed selection, format changes only after something is typed */
@@ -102,6 +101,11 @@ struct _EWebKitEditorPrivate {
 	GdkRGBA *body_bg_color;
 	GdkRGBA *body_link_color;
 	GdkRGBA *body_vlink_color;
+
+	GdkRGBA theme_bgcolor;
+	GdkRGBA theme_fgcolor;
+	GdkRGBA theme_link_color;
+	GdkRGBA theme_vlink_color;
 
 	gchar *font_name;
 
@@ -1359,9 +1363,26 @@ webkit_editor_update_styles (EContentEditor *editor)
 }
 
 static void
-webkit_editor_set_body_color_attribute (EContentEditor *editor,
-					const gchar *attr_name,
-					const GdkRGBA *value)
+webkit_editor_add_color_style (GString *css,
+			       const gchar *selector,
+			       const gchar *property,
+			       const GdkRGBA *value)
+{
+	g_return_if_fail (css != NULL);
+	g_return_if_fail (selector != NULL);
+	g_return_if_fail (property != NULL);
+
+	if (!value || value->alpha <= 1e-9)
+		return;
+
+	g_string_append_printf (css, "%s { %s : #%06x; }\n", selector, property, e_rgba_to_value (value));
+}
+
+static void
+webkit_editor_set_color_attribute (EContentEditor *editor,
+				   GString *script, /* serves two purposes, also says whether write to body or not */
+				   const gchar *attr_name,
+				   const GdkRGBA *value)
 {
 	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
@@ -1370,17 +1391,24 @@ webkit_editor_set_body_color_attribute (EContentEditor *editor,
 
 		g_snprintf (color, 63, "#%06x", e_rgba_to_value (value));
 
-		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoUndoRedo.Disable();"
-			"EvoEditor.SetBodyAttribute(%s, %s);"
-			"EvoUndoRedo.Enable();",
-			attr_name,
-			color);
+		if (script) {
+			e_web_view_jsc_printf_script_gstring (script,
+				"document.documentElement.setAttribute(%s, %s);\n",
+				attr_name,
+				color);
+		} else {
+			e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+				"EvoEditor.SetBodyAttribute(%s, %s);",
+				attr_name,
+				color);
+		}
+	} else if (script) {
+		e_web_view_jsc_printf_script_gstring (script,
+			"document.documentElement.removeAttribute(%s);\n",
+			attr_name);
 	} else {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoUndoRedo.Disable();"
-			"EvoEditor.SetBodyAttribute(%s, null);"
-			"EvoUndoRedo.Enable();",
+			"EvoEditor.SetBodyAttribute(%s, null);",
 			attr_name);
 	}
 }
@@ -1389,7 +1417,7 @@ static void
 webkit_editor_page_set_text_color (EContentEditor *editor,
                                    const GdkRGBA *value)
 {
-	webkit_editor_set_body_color_attribute (editor, "text", value);
+	webkit_editor_set_color_attribute (editor, NULL, "text", value);
 }
 
 static void
@@ -1410,7 +1438,7 @@ static void
 webkit_editor_page_set_background_color (EContentEditor *editor,
                                          const GdkRGBA *value)
 {
-	webkit_editor_set_body_color_attribute (editor, "bgcolor", value);
+	webkit_editor_set_color_attribute (editor, NULL, "bgcolor", value);
 }
 
 static void
@@ -1431,7 +1459,7 @@ static void
 webkit_editor_page_set_link_color (EContentEditor *editor,
                                    const GdkRGBA *value)
 {
-	webkit_editor_set_body_color_attribute (editor, "link", value);
+	webkit_editor_set_color_attribute (editor, NULL, "link", value);
 }
 
 static void
@@ -1455,7 +1483,7 @@ static void
 webkit_editor_page_set_visited_link_color (EContentEditor *editor,
                                            const GdkRGBA *value)
 {
-	webkit_editor_set_body_color_attribute (editor, "vlink", value);
+	webkit_editor_set_color_attribute (editor, NULL, "vlink", value);
 }
 
 static void
@@ -1514,54 +1542,80 @@ get_color_from_context (GtkStyleContext *context,
 static void
 webkit_editor_style_updated_cb (EWebKitEditor *wk_editor)
 {
-	GdkRGBA rgba;
+	EContentEditor *cnt_editor;
+	GdkRGBA bgcolor, fgcolor, link_color, vlink_color;
 	GtkStateFlags state_flags;
 	GtkStyleContext *style_context;
+	GString *css, *script;
 	gboolean backdrop;
+	gboolean inherit_theme_colors;
 
-	/* If the user set the colors in Page dialog, this callback is useless. */
-	if (wk_editor->priv->suppress_color_changes)
-		return;
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
+	cnt_editor = E_CONTENT_EDITOR (wk_editor);
+
+	inherit_theme_colors = g_settings_get_boolean (wk_editor->priv->mail_settings, "composer-inherit-theme-colors");
 	state_flags = gtk_widget_get_state_flags (GTK_WIDGET (wk_editor));
 	style_context = gtk_widget_get_style_context (GTK_WIDGET (wk_editor));
 	backdrop = (state_flags & GTK_STATE_FLAG_BACKDROP) != 0;
 
-	if (wk_editor->priv->html_mode && !g_settings_get_boolean (wk_editor->priv->mail_settings, "composer-inherit-theme-colors")) {
+	if (wk_editor->priv->html_mode && !inherit_theme_colors) {
 		/* Default to white background when not inheriting theme colors */
-		rgba.red = 1.0;
-		rgba.green = 1.0;
-		rgba.blue = 1.0;
-		rgba.alpha = 1.0;
+		bgcolor.red = 1.0;
+		bgcolor.green = 1.0;
+		bgcolor.blue = 1.0;
+		bgcolor.alpha = 1.0;
 	} else if (!gtk_style_context_lookup_color (
 			style_context,
 			backdrop ? "theme_unfocused_base_color" : "theme_base_color",
-			&rgba)) {
-		gdk_rgba_parse (&rgba, E_UTILS_DEFAULT_THEME_BASE_COLOR);
+			&bgcolor)) {
+		gdk_rgba_parse (&bgcolor, E_UTILS_DEFAULT_THEME_BASE_COLOR);
 	}
 
-	webkit_editor_page_set_background_color (E_CONTENT_EDITOR (wk_editor), &rgba);
-
-	if (wk_editor->priv->html_mode && !g_settings_get_boolean (wk_editor->priv->mail_settings, "composer-inherit-theme-colors")) {
+	if (wk_editor->priv->html_mode && !inherit_theme_colors) {
 		/* Default to black text color when not inheriting theme colors */
-		rgba.red = 0.0;
-		rgba.green = 0.0;
-		rgba.blue = 0.0;
-		rgba.alpha = 1.0;
+		fgcolor.red = 0.0;
+		fgcolor.green = 0.0;
+		fgcolor.blue = 0.0;
+		fgcolor.alpha = 1.0;
 	} else if (!gtk_style_context_lookup_color (
 			style_context,
 			backdrop ? "theme_unfocused_fg_color" : "theme_fg_color",
-			&rgba)) {
-		gdk_rgba_parse (&rgba, E_UTILS_DEFAULT_THEME_FG_COLOR);
+			&fgcolor)) {
+		gdk_rgba_parse (&fgcolor, E_UTILS_DEFAULT_THEME_FG_COLOR);
 	}
 
-	webkit_editor_page_set_text_color (E_CONTENT_EDITOR (wk_editor), &rgba);
+	get_color_from_context (style_context, "link-color", &link_color);
+	get_color_from_context (style_context, "visited-link-color", &vlink_color);
 
-	get_color_from_context (style_context, "link-color", &rgba);
-	webkit_editor_page_set_link_color (E_CONTENT_EDITOR (wk_editor), &rgba);
+	if (gdk_rgba_equal (&bgcolor, &wk_editor->priv->theme_bgcolor) &&
+	    gdk_rgba_equal (&fgcolor, &wk_editor->priv->theme_fgcolor) &&
+	    gdk_rgba_equal (&link_color, &wk_editor->priv->theme_link_color) &&
+	    gdk_rgba_equal (&vlink_color, &wk_editor->priv->theme_vlink_color))
+		return;
 
-	get_color_from_context (style_context, "visited-link-color", &rgba);
-	webkit_editor_page_set_visited_link_color (E_CONTENT_EDITOR (wk_editor), &rgba);
+	css = g_string_sized_new (160);
+	script = g_string_sized_new (256);
+
+	webkit_editor_set_color_attribute (cnt_editor, script, "x-evo-bgcolor", &bgcolor);
+	webkit_editor_set_color_attribute (cnt_editor, script, "x-evo-text", &fgcolor);
+	webkit_editor_set_color_attribute (cnt_editor, script, "x-evo-link", &link_color);
+	webkit_editor_set_color_attribute (cnt_editor, script, "x-evo-vlink", &vlink_color);
+
+	webkit_editor_add_color_style (css, "html", "background-color", &bgcolor);
+	webkit_editor_add_color_style (css, "html", "color", &fgcolor);
+	webkit_editor_add_color_style (css, "a", "color", &link_color);
+	webkit_editor_add_color_style (css, "html", "a:visited", &vlink_color);
+
+	e_web_view_jsc_printf_script_gstring (script,
+		"EvoEditor.UpdateThemeStyleSheet(%s);",
+		css->str);
+
+	e_web_view_jsc_run_script_take (WEBKIT_WEB_VIEW (wk_editor),
+		g_string_free (script, FALSE),
+		wk_editor->priv->cancellable);
+
+	g_string_free (css, TRUE);
 }
 
 static gboolean
@@ -1905,7 +1959,7 @@ webkit_editor_get_content_finish (EContentEditor *editor,
 
 					if (image_parts)
 						e_content_editor_util_take_content_data_images (content_hash, image_parts);
-				} else {
+				} else if (!jsc_value_is_undefined (images_value) && !jsc_value_is_null (images_value)) {
 					g_warn_if_reached ();
 				}
 
@@ -2250,9 +2304,6 @@ webkit_editor_set_spell_check_enabled (EWebKitEditor *wk_editor,
 		return;
 
 	wk_editor->priv->spell_check_enabled = enable;
-
-	webkit_editor_call_simple_extension_function (
-		wk_editor, enable ? "DOMForceSpellCheck" : "DOMTurnSpellCheckOff");
 
 	web_context = webkit_web_view_get_context (WEBKIT_WEB_VIEW (wk_editor));
 	webkit_web_context_set_spell_checking_enabled (web_context, enable);
@@ -6457,7 +6508,6 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 	wk_editor->priv->pasting_primary_clipboard = FALSE;
 	wk_editor->priv->pasting_from_itself_extension_value = FALSE;
 	wk_editor->priv->current_user_stylesheet = NULL;
-	wk_editor->priv->suppress_color_changes = FALSE;
 
 	wk_editor->priv->font_color = NULL;
 	wk_editor->priv->background_color = NULL;
@@ -6492,13 +6542,11 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->redo = webkit_editor_redo;
 	iface->clear_undo_redo_history = webkit_editor_clear_undo_redo_history;
 	iface->set_spell_checking_languages = webkit_editor_set_spell_checking_languages;
-	/* FIXME WK2 iface->get_selected_text = webkit_editor_get_selected_text; */
 	iface->get_caret_word = webkit_editor_get_caret_word;
 	iface->replace_caret_word = webkit_editor_replace_caret_word;
 	iface->select_all = webkit_editor_select_all;
 	iface->selection_indent = webkit_editor_selection_indent;
 	iface->selection_unindent = webkit_editor_selection_unindent;
-	/* FIXME WK2 iface->create_link = webkit_editor_create_link; */
 	iface->selection_unlink = webkit_editor_selection_unlink;
 	iface->find = webkit_editor_find;
 	iface->replace = webkit_editor_replace;

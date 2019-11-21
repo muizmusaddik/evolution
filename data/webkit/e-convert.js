@@ -437,7 +437,7 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 			worker.commit(ii);
 		}
 	} else {
-		lines[lines.length] = str;
+		lines[lines.length] = str.endsWith("\n") ? str.substr(0, str.length - 1) : str;
 	}
 
 	var extraIndentStr = extraIndent > 0 ? " ".repeat(extraIndent) : null;

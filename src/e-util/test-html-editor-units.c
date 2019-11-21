@@ -47,7 +47,7 @@ test_style_bold_selection (TestFixture *fixture)
 		"seq:hCrcrCSrsc\n"
 		"action:bold\n",
 		HTML_PREFIX "<div>some <b>bold</b> text</div>" HTML_SUFFIX,
-		"some bold text"))
+		"some bold text\n"))
 		g_test_fail ();
 }
 
@@ -62,7 +62,7 @@ test_style_bold_typed (TestFixture *fixture)
 		"action:bold\n"
 		"type: text\n",
 		HTML_PREFIX "<div>some <b>bold</b> text</div>" HTML_SUFFIX,
-		"some bold text"))
+		"some bold text\n"))
 		g_test_fail ();
 }
 
@@ -75,7 +75,7 @@ test_style_italic_selection (TestFixture *fixture)
 		"seq:hCrcrCSrsc\n"
 		"action:italic\n",
 		HTML_PREFIX "<div>some <i>italic</i> text</div>" HTML_SUFFIX,
-		"some italic text"))
+		"some italic text\n"))
 		g_test_fail ();
 }
 
@@ -90,7 +90,7 @@ test_style_italic_typed (TestFixture *fixture)
 		"action:italic\n"
 		"type: text\n",
 		HTML_PREFIX "<div>some <i>italic</i> text</div>" HTML_SUFFIX,
-		"some italic text"))
+		"some italic text\n"))
 		g_test_fail ();
 }
 
@@ -103,7 +103,7 @@ test_style_underline_selection (TestFixture *fixture)
 		"seq:hCrcrCSrsc\n"
 		"action:underline\n",
 		HTML_PREFIX "<div>some <u>underline</u> text</div>" HTML_SUFFIX,
-		"some underline text"))
+		"some underline text\n"))
 		g_test_fail ();
 }
 
@@ -118,7 +118,7 @@ test_style_underline_typed (TestFixture *fixture)
 		"action:underline\n"
 		"type: text\n",
 		HTML_PREFIX "<div>some <u>underline</u> text</div>" HTML_SUFFIX,
-		"some underline text"))
+		"some underline text\n"))
 		g_test_fail ();
 }
 
@@ -131,7 +131,7 @@ test_style_strikethrough_selection (TestFixture *fixture)
 		"seq:hCrcrCSrsc\n"
 		"action:strikethrough\n",
 		HTML_PREFIX "<div>some <strike>strikethrough</strike> text</div>" HTML_SUFFIX,
-		"some strikethrough text"))
+		"some strikethrough text\n"))
 		g_test_fail ();
 }
 
@@ -146,7 +146,7 @@ test_style_strikethrough_typed (TestFixture *fixture)
 		"action:strikethrough\n"
 		"type: text\n",
 		HTML_PREFIX "<div>some <strike>strikethrough</strike> text</div>" HTML_SUFFIX,
-		"some strikethrough text"))
+		"some strikethrough text\n"))
 		g_test_fail ();
 }
 
@@ -158,8 +158,8 @@ test_style_monospace_selection (TestFixture *fixture)
 		"type:some monospace text\n"
 		"seq:hCrcrCSrsc\n"
 		"action:monospaced\n",
-		HTML_PREFIX "<div>some <font face=\"monospace\" size=\"3\">monospace</font> text</div>" HTML_SUFFIX,
-		"some monospace text"))
+		HTML_PREFIX "<div>some <font face=\"monospace\">monospace</font> text</div>" HTML_SUFFIX,
+		"some monospace text\n"))
 		g_test_fail ();
 }
 
@@ -173,8 +173,8 @@ test_style_monospace_typed (TestFixture *fixture)
 		"type:monospace\n"
 		"action:monospaced\n"
 		"type: text\n",
-		HTML_PREFIX "<div>some <font face=\"monospace\" size=\"3\">monospace</font> text</div>" HTML_SUFFIX,
-		"some monospace text"))
+		HTML_PREFIX "<div>some <font face=\"monospace\">monospace</font> text</div>" HTML_SUFFIX,
+		"some monospace text\n"))
 		g_test_fail ();
 }
 

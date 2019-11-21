@@ -180,6 +180,9 @@ view_source_dialog_show (EHTMLEditor *editor,
 		buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (content));
 		gtk_text_buffer_set_text (buffer, content_text ? content_text : "", -1);
 		gtk_text_view_set_editable (GTK_TEXT_VIEW (content), FALSE);
+		gtk_text_view_set_monospace (GTK_TEXT_VIEW (content), TRUE);
+		if (!plain_text)
+			gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (content), GTK_WRAP_WORD_CHAR);
 	} else {
 		content = webkit_web_view_new ();
 		webkit_web_view_load_html (WEBKIT_WEB_VIEW (content), content_text ? content_text : "", "evo-file://");

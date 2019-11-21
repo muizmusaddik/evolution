@@ -67,6 +67,7 @@ var EvoEditor = {
 
 	mode : 1, // one of the MODE constants
 	storedSelection : null,
+	inheritThemeColors : false,
 	forceFormatStateUpdate : false,
 	formattingState : {
 		mode : -1,
@@ -1309,8 +1310,80 @@ EvoEditor.SetMode = function(mode)
 		} finally {
 			EvoUndoRedo.Enable();
 			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_DOCUMENT, opType);
+
+			EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_YES);
 		}
 	}
+}
+
+EvoEditor.convertHtmlToSend = function()
+{
+	var html, bgcolor, text, link, vlink;
+	var unsetBgcolor = false, unsetText = false, unsetLink = false, unsetVlink = false;
+	var themeCss, inheritThemeColors = EvoEditor.inheritThemeColors;
+
+	themeCss = EvoEditor.UpdateThemeStyleSheet(null);
+	bgcolor = document.documentElement.getAttribute("x-evo-bgcolor");
+	text = document.documentElement.getAttribute("x-evo-text");
+	link = document.documentElement.getAttribute("x-evo-link");
+	vlink = document.documentElement.getAttribute("x-evo-vlink");
+
+	document.documentElement.removeAttribute("x-evo-bgcolor");
+	document.documentElement.removeAttribute("x-evo-text");
+	document.documentElement.removeAttribute("x-evo-link");
+	document.documentElement.removeAttribute("x-evo-vlink");
+
+	if (inheritThemeColors) {
+		if (bgcolor && !document.body.getAttribute("bgcolor")) {
+			document.body.setAttribute("bgcolor", bgcolor);
+			unsetBgcolor = true;
+		}
+
+		if (text && !document.body.getAttribute("text")) {
+			document.body.setAttribute("text", text);
+			unsetText = true;
+		}
+
+		if (link && !document.body.getAttribute("link")) {
+			document.body.setAttribute("link", link);
+			unsetLink = true;
+		}
+
+		if (vlink && !document.body.getAttribute("vlink")) {
+			document.body.setAttribute("vlink", vlink);
+			unsetVlink = true;
+		}
+	}
+
+	html = document.documentElement.outerHTML;
+
+	if (bgcolor)
+		document.documentElement.setAttribute("x-evo-bgcolor", bgcolor);
+	if (text)
+		document.documentElement.setAttribute("x-evo-text", text);
+	if (link)
+		document.documentElement.setAttribute("x-evo-link", link);
+	if (vlink)
+		document.documentElement.setAttribute("x-evo-vlink", vlink);
+
+	if (inheritThemeColors) {
+		if (unsetBgcolor)
+			document.body.removeAttribute("bgcolor");
+
+		if (unsetText)
+			document.body.removeAttribute("text");
+
+		if (unsetLink)
+			document.body.removeAttribute("link");
+
+		if (unsetVlink)
+			document.body.removeAttribute("vlink");
+	}
+
+	if (themeCss)
+		EvoEditor.UpdateThemeStyleSheet(themeCss);
+
+	return html;
 }
 
 EvoEditor.GetContent = function(flags, cid_uid_prefix)
@@ -1372,10 +1445,12 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 
 			for (ii = 0; ii < document.images.length; ii++) {
 				var elem = document.images.item(ii);
+				var src = (elem && elem.src) ? elem.src.toLowerCase() : "";
 
-				if (elem && elem.src && (
-				    elem.src.toLowerCase().startsWith("data:") ||
-				    elem.src.toLowerCase().startsWith("file://"))) {
+				if (elem &&
+				    src.startsWith("data:") ||
+				    src.startsWith("file://") ||
+				    src.startsWith("evo-file://")) {
 					for (jj = 0; jj < img_elems.length; jj++) {
 						if (elem.src == img_elems[jj].orig_src) {
 							elem.subelems[elem.subelems.length] = elem;
@@ -1401,7 +1476,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 						};
 						elem.src = img_obj.cid;
 					}
-				} else if (elem && elem.src && elem.src.toLowerCase().startsWith("cid:")) {
+				} else if (elem && src.startsWith("cid:")) {
 					images[images.length] = {
 						cid : elem.src,
 						src : elem.src
@@ -1445,6 +1520,35 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 	}
 
 	return content_data;
+}
+
+EvoEditor.UpdateThemeStyleSheet = function(css)
+{
+	var styles, ii, res = null;
+
+	styles = document.head.getElementsByTagName("style");
+
+	for (ii = 0; ii < styles.length; ii++) {
+		if (styles[ii].id == "x-evo-theme-sheet") {
+			res = styles[ii].innerHTML;
+
+			if (css)
+				styles[ii].innerHTML = css;
+			else
+				document.head.removeChild(styles[ii]);
+
+			return res;
+		}
+	}
+
+	if (css) {
+		styles = document.createElement("STYLE");
+		styles.id = "x-evo-theme-sheet";
+		styles.innerText = css;
+		document.head.append(styles);
+	}
+
+	return res;
 }
 
 document.onload = EvoEditor.initializeContent;
