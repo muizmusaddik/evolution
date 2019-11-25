@@ -68,6 +68,7 @@ var EvoEditor = {
 	mode : 1, // one of the MODE constants
 	storedSelection : null,
 	inheritThemeColors : false,
+	checkInheritFontsOnChange : false,
 	forceFormatStateUpdate : false,
 	formattingState : {
 		mode : -1,
@@ -892,28 +893,16 @@ EvoEditor.SetBlockFormat = function(format)
 		createParent : null,
 		firstLI : true,
 		targetElement : null,
-		selectionBaseNode : null,
-		selectionBaseOffset : -1,
-		selectionExtentNode : null,
-		selectionExtentOffset : -1,
+		selectionUpdater : null,
 
 		flat : true,
 		onlyBlockElements : true,
 
 		exec : function(parent, element) {
-			var newElement, changeBase = false, changeExtent = false;
+			var newElement;
 
-			if (traversar.selectionBaseNode) {
-				changeBase = element === traversar.selectionBaseNode ||
-					(traversar.selectionBaseNode.noteType == traversar.selectionBaseNode.TEXT_NODE &&
-					 traversar.selectionBaseNode.parentElement === element);
-			}
-
-			if (traversar.selectionExtentNode) {
-				changeExtent = element === traversar.selectionExtentNode ||
-					(traversar.selectionExtentNode.noteType == traversar.selectionExtentNode.TEXT_NODE &&
-					 traversar.selectionExtentNode.parentElement === element);
-			}
+			if (traversar.selectionUpdater)
+				traversar.selectionUpdater.beforeRemove(element);
 
 			if (traversar.firstLI) {
 				if (traversar.createParent) {
@@ -925,15 +914,14 @@ EvoEditor.SetBlockFormat = function(format)
 
 			newElement = EvoEditor.renameElement(element, traversar.toSet.tagName, traversar.toSet.attributes, traversar.targetElement);
 
-			if (changeBase)
-				traversar.selectionBaseNode = newElement;
-
-			if (changeExtent)
-				traversar.selectionExtentNode = newElement;
+			if (traversar.selectionUpdater)
+				traversar.selectionUpdater.afterRemove(newElement);
 
 			return true;
 		}
 	};
+
+	traversar.selectionUpdater = EvoSelection.CreateUpdaterObject();
 
 	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
@@ -985,36 +973,13 @@ EvoEditor.SetBlockFormat = function(format)
 		throw "EvoEditor.SetBlockFormat: Unknown block format value: '" + format + "'";
 	}
 
-	var selectionBefore = EvoSelection.Store(document);
-
 	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat", null, null,
 		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
-
-	traversar.selectionBaseNode = document.getSelection().baseNode;
-	traversar.selectionBaseOffset = document.getSelection().baseOffset;
-	if (!document.getSelection().isCollapsed) {
-		traversar.selectionExtentNode = document.getSelection().extentNode;
-		traversar.selectionExtentOffset = document.getSelection().extentOffset;
-	}
 
 	try {
 		EvoEditor.ForeachChildInAffectedContent(affected, traversar);
 
-		if (traversar.selectionBaseNode && traversar.selectionBaseNode.parentElement) {
-			var selection = {
-				baseElem : EvoSelection.GetChildPath(document.body, traversar.selectionBaseNode),
-				baseOffset : traversar.selectionBaseOffset
-			};
-
-			if (traversar.selectionExtentNode) {
-				selection.extentElem = EvoSelection.GetChildPath(document.body, traversar.selectionExtentNode);
-				selection.extentOffset = traversar.selectionExtentOffset;
-			}
-
-			EvoSelection.Restore(document, selection);
-		} else {
-			EvoSelection.Restore(document, selectionBefore);
-		}
+		traversar.selectionUpdater.restore();
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBlockFormat");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
@@ -1316,6 +1281,151 @@ EvoEditor.SetMode = function(mode)
 	}
 }
 
+EvoEditor.applyFontReset = function(record, isUndo)
+{
+	if (record.changes) {
+		var ii;
+
+		if (isUndo) {
+			for (ii = record.changes.length - 1; ii >= 0; ii--) {
+				var change = record.changes[ii];
+				var parent = EvoSelection.FindElementByPath(document.body, change.parentPath);
+
+				if (!parent) {
+					throw "EvoEditor.applyFontReset: Cannot find node at path " + change.path;
+				}
+
+				parent.innerHTML = change.htmlBefore;
+			}
+		} else {
+			for (ii = 0; ii < record.changes.length; ii++) {
+				var change = record.changes[ii];
+				var parent = EvoSelection.FindElementByPath(document.body, change.parentPath);
+
+				if (!parent) {
+					throw "EvoEditor.applyFontReset: Cannot find node at path " + change.path;
+				}
+
+				parent.innerHTML = change.htmlAfter;
+			}
+		}
+	}
+}
+
+EvoEditor.replaceInheritFonts = function(undoRedoRecord, selectionUpdater)
+{
+	var nodes, ii;
+
+	nodes = document.querySelectorAll("font[face=inherit]");
+
+	for (ii = nodes.length - 1; ii >= 0; ii--) {
+		var node = nodes.item(ii);
+
+		if (!node || (!undoRedoRecord && !document.getSelection().containsNode(node, true)))
+			continue;
+
+		var parent, change = null;
+
+		parent = node.parentElement;
+
+		if (undoRedoRecord) {
+			if (!undoRedoRecord.changes)
+				undoRedoRecord.changes = [];
+
+			change = {
+				parentPath : EvoSelection.GetChildPath(document.body, parent),
+				htmlBefore : parent.innerHTML,
+				htmlAfter : ""
+			};
+
+			undoRedoRecord.changes[undoRedoRecord.changes.length] = change;
+		}
+
+		if (node.attributes.length == 1) {
+			var child;
+
+			while (node.firstChild) {
+				var child = node.firstChild;
+
+				selectionUpdater.beforeRemove(child);
+
+				parent.insertBefore(child, node);
+
+				selectionUpdater.afterRemove(child);
+			}
+
+			parent.removeChild(node);
+		} else {
+			node.removeAttribute("face");
+		}
+
+		if (change)
+			change.htmlAfter = parent.innerHTML;
+	}
+
+	if (undoRedoRecord && undoRedoRecord.changes)
+		undoRedoRecord.apply = EvoEditor.applyFontReset;
+}
+
+EvoEditor.maybeReplaceInheritFonts = function()
+{
+	if (document.querySelectorAll("font[face=inherit]").length <= 0)
+		return;
+
+	var record, selectionUpdater;
+
+	selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "UnsetFontName", null, null, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+	try {
+		EvoEditor.replaceInheritFonts(record, selectionUpdater);
+
+		selectionUpdater.restore();
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "UnsetFontName");
+
+		if (record)
+			EvoUndoRedo.GroupTopRecords(2);
+	}
+}
+
+EvoEditor.SetFontName = function(name)
+{
+	if (!name || name == "")
+		name = "inherit";
+
+	var record, selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "SetFontName", null, null,
+		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		document.execCommand("FontName", false, name);
+
+		if (document.getSelection().isCollapsed) {
+			if (name == "inherit")
+				EvoEditor.checkInheritFontsOnChange = true;
+
+			/* Format change on collapsed selection is not applied immediately */
+			if (record)
+				record.ignore = true;
+		} else if (name == "inherit") {
+			var subrecord;
+
+			subrecord = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetFontName", null, null, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+			try {
+				EvoEditor.replaceInheritFonts(subrecord, selectionUpdater);
+				selectionUpdater.restore();
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetFontName");
+			}
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "SetFontName");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
+}
+
 EvoEditor.convertHtmlToSend = function()
 {
 	var html, bgcolor, text, link, vlink;
@@ -1554,6 +1664,11 @@ EvoEditor.UpdateThemeStyleSheet = function(css)
 document.onload = EvoEditor.initializeContent;
 
 document.onselectionchange = function() {
+	if (EvoEditor.checkInheritFontsOnChange) {
+		EvoEditor.checkInheritFontsOnChange = false;
+		EvoEditor.maybeReplaceInheritFonts();
+	}
+
 	EvoEditor.maybeUpdateFormattingState(EvoEditor.forceFormatStateUpdate ? EvoEditor.FORCE_YES : EvoEditor.FORCE_MAYBE);
 	EvoEditor.forceFormatStateUpdate = false;
 };

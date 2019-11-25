@@ -602,6 +602,20 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 	}
 	g_clear_object (&jsc_value);
 
+	changed = FALSE;
+	jsc_value = jsc_value_object_get_property (jsc_params, "fontFamily");
+	if (jsc_value && jsc_value_is_string (jsc_value)) {
+		gchar *value = jsc_value_to_string (jsc_value);
+
+		if (g_strcmp0 (value, wk_editor->priv->font_name) != 0) {
+			update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE, g_strcmp0 (value, "monospace") == 0);
+			changed = TRUE;
+		}
+
+		g_free (value);
+	}
+	g_clear_object (&jsc_value);
+
 	wk_editor->priv->temporary_style_flags = wk_editor->priv->style_flags;
 
 	#undef update_style_flag
@@ -3862,7 +3876,9 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Strikethrough");
 		break;
 	case E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE:
-		webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontName", "monospace");
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetFontName(%s);",
+			do_set ? "monospace" : "");
 		break;
 	case E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Subscript");

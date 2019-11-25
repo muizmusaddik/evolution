@@ -751,4 +751,42 @@ EvoUndoRedo.Clear = function()
 	EvoUndoRedo.stack.clear();
 }
 
+EvoUndoRedo.GroupTopRecords = function(nRecords, opType)
+{
+	if (EvoUndoRedo.ongoingRecordings.length)
+		throw "EvoUndoRedo.GroupTopRecords: Cannot be called when there are ongoing recordings";
+
+	var group = {};
+
+	group.kind = EvoUndoRedo.RECORD_KIND_GROUP;
+	group.opType = opType;
+	group.selectionBefore = null;
+	group.selectionAfter = null;
+	group.records = [];
+
+	while (nRecords >= 1) {
+		nRecords--;
+
+		var record = EvoUndoRedo.stack.undo();
+
+		if (!record)
+			break;
+
+		group.records[group.records.length] = record;
+		group.selectionBefore = record.selectionBefore;
+
+		if (!group.selectionAfter)
+			group.selectionAfter = record.selectionAfter;
+
+		if (!group.opType)
+			group.opType = record.opType + "::Grouped";
+	}
+
+	if (group.records.length) {
+		group.records = group.records.reverse();
+
+		EvoUndoRedo.stack.push(group);
+	}
+}
+
 EvoUndoRedo.Attach();

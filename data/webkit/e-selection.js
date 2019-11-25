@@ -309,3 +309,85 @@ EvoSelection.FromString = function(str)
 
 	return selection;
 }
+
+/* The so-called updater object has several methods to work with when removing
+   elements from the structure, which tries to preserve selection in the new
+   document structure. The methods are:
+
+   beforeRemove(node) - called before going to remove the 'node'
+   afterRemove(newNode) - with what the 'node' from beforeRemove() had been replaced
+   restore() - called at the end, to restore the selection
+ */
+EvoSelection.CreateUpdaterObject = function()
+{
+	var obj = {
+		selectionBefore : null,
+		selectionBaseNode : null,
+		selectionBaseOffset : -1,
+		selectionExtentNode : null,
+		selectionExtentOffset : -1,
+		changeBase : false,
+		changeExtent : false,
+
+		beforeRemove : function(node) {
+			this.changeBase = false;
+			this.changeExtent = false;
+
+			if (this.selectionBaseNode) {
+				this.changeBase = node === this.selectionBaseNode ||
+					(this.selectionBaseNode.noteType == this.selectionBaseNode.TEXT_NODE &&
+					 this.selectionBaseNode.parentElement === node);
+			}
+
+			if (this.selectionExtentNode) {
+				this.changeExtent = node === this.selectionExtentNode ||
+					(this.selectionExtentNode.noteType == this.selectionExtentNode.TEXT_NODE &&
+					 this.selectionExtentNode.parentElement === node);
+			}
+		},
+
+		afterRemove : function(newNode) {
+			if (this.changeBase) {
+				this.selectionBaseNode = newNode;
+				this.selectionBaseOffset += EvoSelection.GetOverallTextOffset(newNode);
+			}
+
+			if (this.changeExtent) {
+				this.selectionExtentNode = newNode;
+				this.selectionExtentOffset += EvoSelection.GetOverallTextOffset(newNode);
+			}
+
+			this.changeBase = false;
+			this.changeExtent = false;
+		},
+
+		restore : function() {
+			if (this.selectionBaseNode && this.selectionBaseNode.parentElement) {
+				var selection = {
+					baseElem : EvoSelection.GetChildPath(document.body, this.selectionBaseNode),
+					baseOffset : this.selectionBaseOffset
+				};
+
+				if (this.selectionExtentNode) {
+					selection.extentElem = EvoSelection.GetChildPath(document.body, this.selectionExtentNode);
+					selection.extentOffset = this.selectionExtentOffset;
+				}
+
+				EvoSelection.Restore(document, selection);
+			} else {
+				EvoSelection.Restore(document, this.selectionBefore);
+			}
+		}
+	};
+
+	obj.selectionBefore = EvoSelection.Store(document);
+	obj.selectionBaseNode = document.getSelection().baseNode;
+	obj.selectionBaseOffset = document.getSelection().baseOffset;
+
+	if (!document.getSelection().isCollapsed) {
+		obj.selectionExtentNode = document.getSelection().extentNode;
+		obj.selectionExtentOffset = document.getSelection().extentOffset;
+	}
+
+	return obj;
+}
