@@ -1159,6 +1159,14 @@ EvoEditor.SetBodyAttribute = function(name, value)
 	}
 }
 
+EvoEditor.applySetBodyFontName = function(record, isUndo)
+{
+	EvoEditor.UpdateStyleSheet("x-evo-body-fontname", isUndo ? record.beforeCSS : record.afterCSS);
+
+	if (record.beforeStyle != record.afterStyle)
+		document.body.style.fontFamily = isUndo ? record.beforeStyle : record.afterStyle;
+}
+
 EvoEditor.SetBodyFontName = function(name)
 {
 	var record;
@@ -1166,26 +1174,32 @@ EvoEditor.SetBodyFontName = function(name)
 	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyFontName", document.body, document.body, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
 
 	try {
-		if (record) {
-			record.attrName = "style";
-			record.beforeValue = document.body.getAttribute("style");
-			record.apply = EvoEditor.applySetBodyAttribute;
-		}
+		var beforeCSS, css, beforeStyle;
 
 		if (name)
-			document.body.style.fontFamily = name;
+			css = "body { font-family: " + name + "; }";
 		else
-			document.body.style.fontFamily = "";
+			css = null;
+
+		beforeStyle = document.body.style.fontFamily;
+		beforeCSS = EvoEditor.UpdateStyleSheet("x-evo-body-fontname", css);
+
+		if (name != document.body.style.fontFamily)
+			document.body.style.fontFamily = name ? name : "";
 
 		if (record) {
-			record.attrValue = document.body.getAttribute("style");
+			record.apply = EvoEditor.applySetBodyFontName;
+			record.beforeCSS = beforeCSS;
+			record.afterCSS = css;
+			record.beforeStyle = beforeStyle;
+			record.afterStyle = document.body.style.fontFamily;
 
-			if (record.attrValue == record.beforeValue)
+			if (record.beforeCSS == record.afterCSS && record.beforeStyle == record.afterStyle)
 				record.ignore = true;
 		}
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyFontName");
-		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_YES);
 
 		if (!record || !record.ignore)
 			EvoEditor.EmitContentChanged();
@@ -1433,11 +1447,17 @@ EvoEditor.SetFontName = function(name)
 	if (!name || name == "")
 		name = "inherit";
 
-	var record, selectionUpdater = EvoSelection.CreateUpdaterObject();
+	var record, selectionUpdater = EvoSelection.CreateUpdaterObject(), bodyFontFamily;
+
+	// to workaround https://bugs.webkit.org/show_bug.cgi?id=204622
+	bodyFontFamily = document.body.style.fontFamily;
 
 	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "SetFontName", null, null,
 		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 	try {
+		if (!document.getSelection().isCollapsed && bodyFontFamily)
+			document.body.style.fontFamily = "";
+
 		document.execCommand("FontName", false, name);
 
 		if (document.getSelection().isCollapsed) {
@@ -1459,6 +1479,9 @@ EvoEditor.SetFontName = function(name)
 			}
 		}
 	} finally {
+		if (bodyFontFamily && document.body.style.fontFamily != bodyFontFamily)
+			document.body.style.fontFamily = bodyFontFamily;
+
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "SetFontName");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
@@ -1470,6 +1493,7 @@ EvoEditor.convertHtmlToSend = function()
 	var html, bgcolor, text, link, vlink;
 	var unsetBgcolor = false, unsetText = false, unsetLink = false, unsetVlink = false;
 	var themeCss, inheritThemeColors = EvoEditor.inheritThemeColors;
+	var ii, styles, styleNode = null;
 
 	themeCss = EvoEditor.UpdateThemeStyleSheet(null);
 	bgcolor = document.documentElement.getAttribute("x-evo-bgcolor");
@@ -1504,7 +1528,20 @@ EvoEditor.convertHtmlToSend = function()
 		}
 	}
 
+	styles = document.head.getElementsByTagName("style");
+
+	for (ii = 0; ii < styles.length; ii++) {
+		if (styles[ii].id == "x-evo-body-fontname") {
+			styleNode = styles[ii];
+			styleNode.id = "";
+			break;
+		}
+	}
+
 	html = document.documentElement.outerHTML;
+
+	if (styleNode)
+		styleNode.id = "x-evo-body-fontname";
 
 	if (bgcolor)
 		document.documentElement.setAttribute("x-evo-bgcolor", bgcolor);
@@ -1671,14 +1708,14 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 	return content_data;
 }
 
-EvoEditor.UpdateThemeStyleSheet = function(css)
+EvoEditor.UpdateStyleSheet = function(id, css)
 {
 	var styles, ii, res = null;
 
 	styles = document.head.getElementsByTagName("style");
 
 	for (ii = 0; ii < styles.length; ii++) {
-		if (styles[ii].id == "x-evo-theme-sheet") {
+		if (styles[ii].id == id) {
 			res = styles[ii].innerHTML;
 
 			if (css)
@@ -1691,13 +1728,20 @@ EvoEditor.UpdateThemeStyleSheet = function(css)
 	}
 
 	if (css) {
-		styles = document.createElement("STYLE");
-		styles.id = "x-evo-theme-sheet";
-		styles.innerText = css;
-		document.head.append(styles);
+		var style;
+
+		style = document.createElement("STYLE");
+		style.id = id;
+		style.innerText = css;
+		document.head.append(style);
 	}
 
 	return res;
+}
+
+EvoEditor.UpdateThemeStyleSheet = function(css)
+{
+	return EvoEditor.UpdateStyleSheet("x-evo-theme-sheet", css);
 }
 
 document.onload = EvoEditor.initializeContent;
