@@ -384,53 +384,55 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
 		opType += "::WordDelim";
 
-	if (opType == "deleteWordBackward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "backward", "word");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteWordForward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "forward", "word");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteSoftLineBackward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "backward", "line");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteSoftLineForward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "forward", "line");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteEntireSoftLine") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "backward", "line");
-		startNode = document.getSelection().baseNode;
-		document.getSelection().modify("move", "forward", "line");
-		endNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteHardLineBackward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "backward", "paragraph");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteHardLineForward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "forward", "paragraph");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteContentBackward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "backward", "paragraph");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
-	} else if (opType == "deleteContentForward") {
-		var sel = EvoSelection.Store(document);
-		document.getSelection().modify("move", "forward", "paragraph");
-		startNode = document.getSelection().baseNode;
-		EvoSelection.Restore(document, sel);
+	if (document.getSelection().isCollapsed) {
+		if (opType == "deleteWordBackward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "backward", "word");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteWordForward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "forward", "word");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteSoftLineBackward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "backward", "line");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteSoftLineForward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "forward", "line");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteEntireSoftLine") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "backward", "line");
+			startNode = document.getSelection().baseNode;
+			document.getSelection().modify("move", "forward", "line");
+			endNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteHardLineBackward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "backward", "paragraph");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteHardLineForward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "forward", "paragraph");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteContentBackward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "backward", "paragraph");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		} else if (opType == "deleteContentForward") {
+			var sel = EvoSelection.Store(document);
+			document.getSelection().modify("move", "forward", "paragraph");
+			startNode = document.getSelection().baseNode;
+			EvoSelection.Restore(document, sel);
+		}
 	}
 
 	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, startNode, endNode,
