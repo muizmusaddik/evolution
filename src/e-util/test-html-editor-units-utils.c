@@ -878,6 +878,21 @@ test_utils_execute_action (TestFixture *fixture,
 	return TRUE;
 }
 
+static gboolean
+test_utils_set_font_name (TestFixture *fixture,
+			  const gchar *font_name)
+{
+	EContentEditor *cnt_editor;
+
+	g_return_val_if_fail (fixture != NULL, FALSE);
+	g_return_val_if_fail (E_IS_HTML_EDITOR (fixture->editor), FALSE);
+
+	cnt_editor = e_html_editor_get_content_editor (fixture->editor);
+	e_content_editor_set_font_name (cnt_editor, font_name);
+
+	return TRUE;
+}
+
 /* Expects only the part like "undo" [ ":" number ] */
 static gint
 test_utils_maybe_extract_undo_number (const gchar *command)
@@ -922,6 +937,7 @@ test_utils_pick_undo_content (const GSList *undo_stack,
 
    command   = actioncmd ; Execute an action
              / modecmd   ; Change editor mode to HTML or Plain Text
+             / fnmcmd    ; Set font name
              / seqcmd    ; Sequence of special key strokes
              / typecmd   ; Type a text
              / undocmd   ; Undo/redo commands
@@ -929,7 +945,9 @@ test_utils_pick_undo_content (const GSList *undo_stack,
 
    actioncmd = "action:" name
 
-   actioncmd = "mode:" ("html" / "plain")
+   modecmd   = "mode:" ("html" / "plain")
+
+   fnmcmd    = "font-name:" name
 
    seqcmd    = "seq:" sequence
 
@@ -996,6 +1014,8 @@ test_utils_process_commands (TestFixture *fixture,
 				success = FALSE;
 				g_warning ("%s: Unknown mode '%s'", G_STRFUNC, mode_change);
 			}
+		} else if (g_str_has_prefix (command, "font-name:")) {
+			success = test_utils_set_font_name (fixture, command + 10);
 		} else if (g_str_has_prefix (command, "seq:")) {
 			success = test_utils_process_sequence (fixture, command + 4);
 		} else if (g_str_has_prefix (command, "type:")) {

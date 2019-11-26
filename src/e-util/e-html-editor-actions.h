@@ -113,8 +113,6 @@
 	E_HTML_EDITOR_ACTION ((editor), "mode-html")
 #define E_HTML_EDITOR_ACTION_MODE_PLAIN(editor) \
 	E_HTML_EDITOR_ACTION ((editor), "mode-plain")
-#define E_HTML_EDITOR_ACTION_MONOSPACED(editor) \
-	E_HTML_EDITOR_ACTION ((editor), "monospaced")
 #define E_HTML_EDITOR_ACTION_PASTE(editor) \
 	E_HTML_EDITOR_ACTION ((editor), "paste")
 #define E_HTML_EDITOR_ACTION_PASTE_QUOTE(editor) \

@@ -1494,14 +1494,6 @@ static GtkToggleActionEntry html_toggle_entries[] = {
 	  NULL,
 	  FALSE },
 
-	{ "monospaced",
-	  "stock_text-monospaced",
-	  N_("_Plain Text"),
-	  "<Control>t",
-	  N_("Plain Text"),
-	  NULL,
-	  FALSE },
-
 	{ "strikethrough",
 	  "format-text-strikethrough",
 	  N_("_Strikethrough"),
@@ -2208,6 +2200,20 @@ editor_actions_init (EHTMLEditor *editor)
 	gtk_action_set_sensitive (ACTION (FIND_AGAIN), FALSE);
 }
 
+static gboolean
+e_html_editor_content_editor_font_name_to_combo_box (GBinding *binding,
+						     const GValue *from_value,
+						     GValue *to_value,
+						     gpointer user_data)
+{
+	gchar *id = NULL;
+
+	id = e_html_editor_until_dup_font_id (GTK_COMBO_BOX (g_binding_get_target (binding)), g_value_get_string (from_value));
+	g_value_take_string (to_value, id ? id : g_strdup (""));
+
+	return TRUE;
+}
+
 void
 editor_actions_bind (EHTMLEditor *editor)
 {
@@ -2281,10 +2287,6 @@ editor_actions_bind (EHTMLEditor *editor)
 		ACTION (ITALIC), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
 	e_binding_bind_property (
-		cnt_editor, "monospaced",
-		ACTION (MONOSPACED), "active",
-		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-	e_binding_bind_property (
 		cnt_editor, "strikethrough",
 		ACTION (STRIKETHROUGH), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
@@ -2292,6 +2294,13 @@ editor_actions_bind (EHTMLEditor *editor)
 		cnt_editor, "underline",
 		ACTION (UNDERLINE), "active",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+	e_binding_bind_property_full (
+		cnt_editor, "font-name",
+		editor->priv->font_name_combo_box, "active-id",
+		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL,
+		e_html_editor_content_editor_font_name_to_combo_box,
+		NULL,
+		NULL, NULL);
 
 	/* Cannot use binding, due to subscript and superscript being mutually exclusive */
 	g_signal_connect_object (ACTION (SUBSCRIPT), "toggled",

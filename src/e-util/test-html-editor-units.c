@@ -157,7 +157,7 @@ test_style_monospace_selection (TestFixture *fixture)
 		"mode:html\n"
 		"type:some monospace text\n"
 		"seq:hCrcrCSrsc\n"
-		"action:monospaced\n",
+		"font-name:monospace\n",
 		HTML_PREFIX "<div>some <font face=\"monospace\">monospace</font> text</div>" HTML_SUFFIX,
 		"some monospace text\n"))
 		g_test_fail ();
@@ -169,9 +169,9 @@ test_style_monospace_typed (TestFixture *fixture)
 	if (!test_utils_run_simple_test (fixture,
 		"mode:html\n"
 		"type:some \n"
-		"action:monospaced\n"
+		"font-name:monospace\n"
 		"type:monospace\n"
-		"action:monospaced\n"
+		"font-name:\n"
 		"type: text\n",
 		HTML_PREFIX "<div>some <font face=\"monospace\">monospace</font> text</div>" HTML_SUFFIX,
 		"some monospace text\n"))
@@ -2342,7 +2342,7 @@ test_undo_style (TestFixture *fixture)
 		"undo:drop\n" /* drop the save 2 */
 		"undo:undo:14\n"
 
-		"action:monospaced\n"
+		"font-name:monospace\n"
 		"type:monospaced\n"
 		"undo:save\n" /* 2 */
 		"undo:undo:11\n"
@@ -2353,7 +2353,7 @@ test_undo_style (TestFixture *fixture)
 		"undo:undo:11\n"
 		"type:monospaced\n"
 		"seq:CSlsc\n"
-		"action:monospaced\n"
+		"font-name:monospace\n"
 		"undo:save\n" /* 2 */
 		"undo:undo:11\n"
 		"undo:test:2\n"

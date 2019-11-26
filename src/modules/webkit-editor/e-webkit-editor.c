@@ -60,7 +60,6 @@ enum {
 	PROP_FONT_SIZE,
 	PROP_INDENTED,
 	PROP_ITALIC,
-	PROP_MONOSPACED,
 	PROP_STRIKETHROUGH,
 	PROP_SUBSCRIPT,
 	PROP_SUPERSCRIPT,
@@ -108,6 +107,7 @@ struct _EWebKitEditorPrivate {
 	GdkRGBA theme_vlink_color;
 
 	gchar *font_name;
+	gchar *body_font_name;
 
 	guint font_size;
 
@@ -160,12 +160,11 @@ static const GdkRGBA transparent = { 0, 0, 0, 0 };
 typedef enum {
 	E_WEBKIT_EDITOR_STYLE_NONE		= 0,
 	E_WEBKIT_EDITOR_STYLE_IS_BOLD		= 1 << 0,
-	E_WEBKIT_EDITOR_STYLE_IS_ITALIC	= 1 << 1,
+	E_WEBKIT_EDITOR_STYLE_IS_ITALIC		= 1 << 1,
 	E_WEBKIT_EDITOR_STYLE_IS_UNDERLINE	= 1 << 2,
 	E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH	= 1 << 3,
-	E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE	= 1 << 4,
-	E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT	= 1 << 5,
-	E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT	= 1 << 6
+	E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT	= 1 << 4,
+	E_WEBKIT_EDITOR_STYLE_IS_SUPERSCRIPT	= 1 << 5
 } EWebKitEditorStyleFlags;
 
 typedef void (*PostReloadOperationFunc) (EWebKitEditor *wk_editor, gpointer data, EContentEditorInsertContentFlags flags);
@@ -602,20 +601,6 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 	}
 	g_clear_object (&jsc_value);
 
-	changed = FALSE;
-	jsc_value = jsc_value_object_get_property (jsc_params, "fontFamily");
-	if (jsc_value && jsc_value_is_string (jsc_value)) {
-		gchar *value = jsc_value_to_string (jsc_value);
-
-		if (g_strcmp0 (value, wk_editor->priv->font_name) != 0) {
-			update_style_flag (E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE, g_strcmp0 (value, "monospace") == 0);
-			changed = TRUE;
-		}
-
-		g_free (value);
-	}
-	g_clear_object (&jsc_value);
-
 	wk_editor->priv->temporary_style_flags = wk_editor->priv->style_flags;
 
 	#undef update_style_flag
@@ -652,6 +637,19 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 
 	if (changed || forced)
 		g_object_notify (object, "font-name");
+
+	jsc_value = jsc_value_object_get_property (jsc_params, "bodyFontFamily");
+	if (jsc_value && jsc_value_is_string (jsc_value)) {
+		gchar *value = jsc_value_to_string (jsc_value);
+
+		if (g_strcmp0 (value, wk_editor->priv->body_font_name) != 0) {
+			g_free (wk_editor->priv->body_font_name);
+			wk_editor->priv->body_font_name = value;
+		} else {
+			g_free (value);
+		}
+	}
+	g_clear_object (&jsc_value);
 
 	if (webkit_editor_update_color_value (jsc_params, "fgColor", &wk_editor->priv->font_color) || forced)
 		g_object_notify (object, "font-color");
@@ -1515,6 +1513,28 @@ webkit_editor_page_get_visited_link_color (EContentEditor *editor,
 		color->green = 0;
 		color->blue = 0;
 	}
+}
+
+static void
+webkit_editor_page_set_font_name (EContentEditor *editor,
+				  const gchar *value)
+{
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
+
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.SetBodyFontName(%s);",
+		value ? value : "");
+}
+
+static const gchar *
+webkit_editor_page_get_font_name (EContentEditor *editor)
+{
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
+
+	if (!wk_editor->priv->html_mode)
+		return NULL;
+
+	return wk_editor->priv->body_font_name;
 }
 
 static void
@@ -3777,13 +3797,18 @@ webkit_editor_set_font_name (EWebKitEditor *wk_editor,
 {
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
-	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (wk_editor), "FontName", value);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.SetFontName(%s);",
+		value ? value : "");
 }
 
 static const gchar *
 webkit_editor_get_font_name (EWebKitEditor *wk_editor)
 {
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), NULL);
+
+	if (!wk_editor->priv->html_mode)
+		return NULL;
 
 	return wk_editor->priv->font_name;
 }
@@ -3874,11 +3899,6 @@ webkit_editor_set_style_flag (EWebKitEditor *wk_editor,
 		break;
 	case E_WEBKIT_EDITOR_STYLE_IS_STRIKETHROUGH:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Strikethrough");
-		break;
-	case E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE:
-		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoEditor.SetFontName(%s);",
-			do_set ? "monospace" : "");
 		break;
 	case E_WEBKIT_EDITOR_STYLE_IS_SUBSCRIPT:
 		webkit_web_view_execute_editing_command (WEBKIT_WEB_VIEW (wk_editor), "Subscript");
@@ -5334,6 +5354,7 @@ webkit_editor_finalize (GObject *object)
 	g_clear_object (&priv->cancellable);
 	g_clear_error (&priv->last_error);
 
+	g_free (priv->body_font_name);
 	g_free (priv->font_name);
 
 	/* Chain up to parent's finalize() method. */
@@ -5412,13 +5433,6 @@ webkit_editor_set_property (GObject *object,
 			webkit_editor_set_style_flag (
 				E_WEBKIT_EDITOR (object),
 				E_WEBKIT_EDITOR_STYLE_IS_ITALIC,
-				g_value_get_boolean (value));
-			return;
-
-		case PROP_MONOSPACED:
-			webkit_editor_set_style_flag (
-				E_WEBKIT_EDITOR (object),
-				E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE,
 				g_value_get_boolean (value));
 			return;
 
@@ -5608,14 +5622,6 @@ webkit_editor_get_property (GObject *object,
 				webkit_editor_get_style_flag (
 					E_WEBKIT_EDITOR (object),
 					E_WEBKIT_EDITOR_STYLE_IS_ITALIC));
-			return;
-
-		case PROP_MONOSPACED:
-			g_value_set_boolean (
-				value,
-				webkit_editor_get_style_flag (
-					E_WEBKIT_EDITOR (object),
-					E_WEBKIT_EDITOR_STYLE_IS_MONOSPACE));
 			return;
 
 		case PROP_STRIKETHROUGH:
@@ -6392,8 +6398,6 @@ e_webkit_editor_class_init (EWebKitEditorClass *class)
 	g_object_class_override_property (
 		object_class, PROP_ITALIC, "italic");
 	g_object_class_override_property (
-		object_class, PROP_MONOSPACED, "monospaced");
-	g_object_class_override_property (
 		object_class, PROP_STRIKETHROUGH, "strikethrough");
 	g_object_class_override_property (
 		object_class, PROP_SUBSCRIPT, "subscript");
@@ -6527,6 +6531,7 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 
 	wk_editor->priv->font_color = NULL;
 	wk_editor->priv->background_color = NULL;
+	wk_editor->priv->body_font_name = NULL;
 	wk_editor->priv->font_name = NULL;
 	wk_editor->priv->font_size = E_CONTENT_EDITOR_FONT_SIZE_NORMAL;
 	wk_editor->priv->block_format = E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH;
@@ -6629,6 +6634,8 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->page_get_link_color = webkit_editor_page_get_link_color;
 	iface->page_set_visited_link_color = webkit_editor_page_set_visited_link_color;
 	iface->page_get_visited_link_color = webkit_editor_page_get_visited_link_color;
+	iface->page_set_font_name = webkit_editor_page_set_font_name;
+	iface->page_get_font_name = webkit_editor_page_get_font_name;
 	iface->page_set_background_image_uri = webkit_editor_page_set_background_image_uri;
 	iface->page_get_background_image_uri = webkit_editor_page_get_background_image_uri;
 	iface->on_page_dialog_open = webkit_editor_on_page_dialog_open;

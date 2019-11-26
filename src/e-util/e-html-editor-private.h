@@ -82,6 +82,7 @@ struct _EHTMLEditorPrivate {
 	GtkWidget *mode_combo_box;
 	GtkWidget *size_combo_box;
 	GtkWidget *style_combo_box;
+	GtkWidget *font_name_combo_box;
 	GtkWidget *scrolled_window;
 
 	GtkWidget *emoji_chooser;
@@ -104,6 +105,10 @@ void		editor_actions_update_spellcheck_languages_menu
 						 const gchar * const *languages);
 const gchar *	e_html_editor_get_content_editor_name
 						(EHTMLEditor *editor);
+GtkWidget *	e_html_editor_util_create_font_name_combo
+						(void);
+gchar *		e_html_editor_until_dup_font_id	(GtkComboBox *combo_box,
+						 const gchar *font_name);
 
 G_END_DECLS
 

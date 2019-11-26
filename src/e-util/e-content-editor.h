@@ -295,6 +295,9 @@ struct _EContentEditorInterface {
 
 	void		(*page_get_visited_link_color)	(EContentEditor *editor,
 							 GdkRGBA *value);
+	void		(*page_set_font_name)		(EContentEditor *editor,
+							 const gchar *value);
+	const gchar *	(*page_get_font_name)		(EContentEditor *editor);
 
 	void		(*page_set_background_image_uri)
 							(EContentEditor *editor,
@@ -517,9 +520,6 @@ gboolean	e_content_editor_is_bold	(EContentEditor *editor);
 void		e_content_editor_set_italic	(EContentEditor *editor,
 						 gboolean italic);
 gboolean	e_content_editor_is_italic	(EContentEditor *editor);
-void		e_content_editor_set_monospaced	(EContentEditor *editor,
-						 gboolean monospaced);
-gboolean	e_content_editor_is_monospaced (EContentEditor *editor);
 void		e_content_editor_set_strikethrough
 						(EContentEditor *editor,
 						 gboolean strikethrough);
@@ -894,6 +894,12 @@ void		e_content_editor_page_set_visited_link_color
 void		e_content_editor_page_get_visited_link_color
 						(EContentEditor *editor,
 						 GdkRGBA *value);
+void		e_content_editor_page_set_font_name
+						(EContentEditor *editor,
+						 const gchar *value);
+
+const gchar *	e_content_editor_page_get_font_name
+						(EContentEditor *editor);
 
 void		e_content_editor_page_set_background_image_uri
 						(EContentEditor *editor,

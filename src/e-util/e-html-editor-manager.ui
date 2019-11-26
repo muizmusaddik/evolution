@@ -53,8 +53,6 @@
       <menuitem action='mode-plain'/>
       <separator/>
       <menu action='font-style-menu'>
-        <menuitem action='monospaced'/>
-        <separator/>
         <menuitem action='bold'/>
         <menuitem action='italic'/>
         <menuitem action='underline'/>
@@ -130,7 +128,6 @@
   </toolbar>
   <toolbar name='html-toolbar'>
     <separator/>
-    <toolitem action='monospaced'/>
     <toolitem action='bold'/>
     <toolitem action='italic'/>
     <toolitem action='underline'/>

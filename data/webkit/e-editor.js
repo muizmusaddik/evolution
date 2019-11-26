@@ -88,7 +88,8 @@ var EvoEditor = {
 		bodyFgColor : null,
 		bodyBgColor : null,
 		bodyLinkColor : null,
-		bodyVlinkColor : null
+		bodyVlinkColor : null,
+		bodyFontFamily : null
 	}
 };
 
@@ -174,13 +175,18 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	value = computedStyle ? computedStyle.fontFamily : "";
 	if (force || value != EvoEditor.formattingState.fontFamily) {
 		EvoEditor.formattingState.fontFamily = value;
-		changes["fontFamily"] = value;
+		changes["fontFamily"] = (window.getComputedStyle(document.body).fontFamily == value) ? "" : value;
+		nchanges++;
+	}
+
+	value = document.body ? document.body.style.fontFamily : "";
+	if (force || value != EvoEditor.formattingState.bodyFontFamily) {
+		EvoEditor.formattingState.bodyFontFamily = value;
+		changes["bodyFontFamily"] = value;
 		nchanges++;
 	}
 
 	value = computedStyle ? computedStyle.color : "";
-	if (value == "-webkit-standard")
-		value = "";
 	if (force || value != EvoEditor.formattingState.fgColor) {
 		EvoEditor.formattingState.fgColor = value;
 		changes["fgColor"] = value;
@@ -1150,6 +1156,39 @@ EvoEditor.SetBodyAttribute = function(name, value)
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyAttribute::" + name);
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
+	}
+}
+
+EvoEditor.SetBodyFontName = function(name)
+{
+	var record;
+
+	record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyFontName", document.body, document.body, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+
+	try {
+		if (record) {
+			record.attrName = "style";
+			record.beforeValue = document.body.getAttribute("style");
+			record.apply = EvoEditor.applySetBodyAttribute;
+		}
+
+		if (name)
+			document.body.style.fontFamily = name;
+		else
+			document.body.style.fontFamily = "";
+
+		if (record) {
+			record.attrValue = document.body.getAttribute("style");
+
+			if (record.attrValue == record.beforeValue)
+				record.ignore = true;
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyFontName");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+
+		if (!record || !record.ignore)
+			EvoEditor.EmitContentChanged();
 	}
 }
 

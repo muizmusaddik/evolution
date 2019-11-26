@@ -95,6 +95,134 @@ G_DEFINE_TYPE_WITH_CODE (
 		E_TYPE_ALERT_SINK,
 		e_html_editor_alert_sink_init))
 
+/* See: https://www.w3schools.com/cssref/css_websafe_fonts.asp */
+static struct _SupportedFonts {
+	const gchar *display_name;
+	const gchar *css_value;
+} supported_fonts[] = {
+	{ "Georgia", "Georgia, serif" },
+	{ "Palatino", "\"Palatino Linotype\", \"Book Antiqua\", Palatino, serif" },
+	{ "Times New Roman", "\"Times New Roman\", Times, serif" },
+	{ "Arial", "Arial, Helvetica, sans-serif" },
+	{ "Arial Black", "\"Arial Black\", Gadget, sans-serif" },
+	{ "Comic Sans MS", "\"Comic Sans MS\", cursive, sans-serif" },
+	{ "Impact", "Impact, Charcoal, sans-serif" },
+	{ "Lucida Sans", "\"Lucida Sans Unicode\", \"Lucida Grande\", sans-serif" },
+	{ "Tahoma", "Tahoma, Geneva, sans-serif" },
+	{ "Trebuchet MS", "\"Trebuchet MS\", Helvetica, sans-serif" },
+	{ "Verdana", "Verdana, Geneva, sans-serif" },
+	{ "Monospace", "monospace" },
+	{ "Courier New", "\"Courier New\", Courier, monospace" },
+	{ "Lucida Console", "\"Lucida Console\", Monaco, monospace" }
+};
+
+GtkWidget *
+e_html_editor_util_create_font_name_combo (void)
+{
+	GtkComboBoxText *combo_box;
+	gint ii;
+
+	combo_box = GTK_COMBO_BOX_TEXT (gtk_combo_box_text_new ());
+
+	gtk_combo_box_text_append (combo_box, "", _("Default"));
+
+	for (ii = 0; ii < G_N_ELEMENTS (supported_fonts); ii++) {
+		gtk_combo_box_text_append (combo_box, supported_fonts[ii].css_value, supported_fonts[ii].display_name);
+	}
+
+	return GTK_WIDGET (combo_box);
+}
+
+gchar *
+e_html_editor_until_dup_font_id (GtkComboBox *combo_box,
+				 const gchar *font_name)
+{
+	GtkTreeModel *model;
+	GtkTreeIter iter;
+	GSList *free_str = NULL;
+	gchar *id = NULL, **variants;
+	gint id_column, ii;
+
+	g_return_val_if_fail (GTK_IS_COMBO_BOX_TEXT (combo_box), NULL);
+
+	if (!font_name || !*font_name)
+		return NULL;
+
+	for (ii = 0; ii < G_N_ELEMENTS (supported_fonts); ii++) {
+		if (camel_strcase_equal (supported_fonts[ii].css_value, font_name))
+			return g_strdup (font_name);
+	}
+
+	id_column = gtk_combo_box_get_id_column (combo_box);
+	model = gtk_combo_box_get_model (combo_box);
+
+	if (gtk_tree_model_get_iter_first (model, &iter)) {
+		do {
+			gchar *stored_id = NULL;
+
+			gtk_tree_model_get (model, &iter, id_column, &stored_id, -1);
+
+			if (stored_id && *stored_id) {
+				if (camel_strcase_equal (stored_id, font_name)) {
+					id = stored_id;
+					break;
+				}
+
+				free_str = g_slist_prepend (free_str, stored_id);
+			} else {
+				g_free (stored_id);
+			}
+		} while (gtk_tree_model_iter_next (model, &iter));
+	}
+
+	if (!id) {
+		GHashTable *known_fonts;
+		GSList *free_strv = NULL, *link;
+
+		known_fonts = g_hash_table_new (camel_strcase_hash, camel_strcase_equal);
+
+		for (link = free_str; link; link = g_slist_next (link)) {
+			gchar *stored_id = link->data;
+
+			variants = g_strsplit (stored_id, ",", -1);
+			for (ii = 0; variants[ii]; ii++) {
+				if (variants[ii][0] &&
+				    !g_hash_table_contains (known_fonts, variants[ii])) {
+					g_hash_table_insert (known_fonts, variants[ii], stored_id);
+				}
+			}
+
+			free_strv = g_slist_prepend (free_strv, variants);
+		}
+
+		variants = g_strsplit (font_name, ",", -1);
+		for (ii = 0; variants[ii]; ii++) {
+			if (variants[ii][0]) {
+				const gchar *stored_id;
+
+				stored_id = g_hash_table_lookup (known_fonts, variants[ii]);
+				if (stored_id) {
+					id = g_strdup (stored_id);
+					break;
+				}
+			}
+		}
+
+		if (!id) {
+			gtk_combo_box_text_append (GTK_COMBO_BOX_TEXT (combo_box), font_name, variants[0]);
+			id = g_strdup (font_name);
+		}
+
+		g_hash_table_destroy (known_fonts);
+		g_slist_free_full (free_strv, (GDestroyNotify) g_strfreev);
+		g_strfreev (variants);
+	}
+
+	g_slist_free_full (free_str, g_free);
+
+	return id;
+}
+
 /* Action callback for context menu spelling suggestions.
  * XXX This should really be in e-html-editor-actions.c */
 static void
@@ -793,6 +921,15 @@ html_editor_constructed (GObject *object)
 	priv->size_combo_box = g_object_ref (widget);
 	gtk_widget_show_all (GTK_WIDGET (tool_item));
 
+	tool_item = gtk_tool_item_new ();
+	widget = e_html_editor_util_create_font_name_combo ();
+	gtk_combo_box_set_focus_on_click (GTK_COMBO_BOX (widget), FALSE);
+	gtk_container_add (GTK_CONTAINER (tool_item), widget);
+	gtk_widget_set_tooltip_text (widget, _("Font Name"));
+	gtk_toolbar_insert (toolbar, tool_item, 0);
+	priv->font_name_combo_box = g_object_ref (widget);
+	gtk_widget_show_all (GTK_WIDGET (tool_item));
+
 	g_signal_connect_after (object, "realize", G_CALLBACK (html_editor_realize), NULL);
 }
 
@@ -825,6 +962,7 @@ html_editor_dispose (GObject *object)
 	g_clear_object (&priv->bg_color_combo_box);
 	g_clear_object (&priv->mode_combo_box);
 	g_clear_object (&priv->size_combo_box);
+	g_clear_object (&priv->font_name_combo_box);
 	g_clear_object (&priv->style_combo_box);
 
 	/* Chain up to parent's dispose() method. */

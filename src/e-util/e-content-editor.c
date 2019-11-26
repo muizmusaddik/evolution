@@ -331,22 +331,6 @@ e_content_editor_default_init (EContentEditorInterface *iface)
 			G_PARAM_STATIC_STRINGS));
 
 	/**
-	 * EContentEditor:monospaced
-	 *
-	 * Holds whether current selection or letter at current cursor position
-	 * is monospaced.
-	 */
-	g_object_interface_install_property (
-		iface,
-		g_param_spec_boolean (
-			"monospaced",
-			NULL,
-			NULL,
-			FALSE,
-			G_PARAM_READWRITE |
-			G_PARAM_STATIC_STRINGS));
-
-	/**
 	 * EContentEditor:strikethrough
 	 *
 	 * Holds whether current selection or letter at current cursor position
@@ -1180,48 +1164,6 @@ e_content_editor_is_italic (EContentEditor *editor)
 	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
 
 	g_object_get (G_OBJECT (editor), "italic", &value, NULL);
-
-	return value;
-}
-
-/**
- * e_content_editor_set_monospaced:
- * @editor: an #EContentEditor
- * @monospaced: %TRUE to enable monospaced, %FALSE to disable
- *
- * Changes monospaced formatting of current selection or letter
- * at current cursor position.
- *
- * Since: 3.22
- **/
-void
-e_content_editor_set_monospaced (EContentEditor *editor,
-				 gboolean monospaced)
-{
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	g_object_set (G_OBJECT (editor), "monospaced", monospaced, NULL);
-}
-
-/**
- * e_content_editor_is_monospaced:
- * @editor: an #EContentEditor
- *
- * Returns whether current selection or letter at current cursor position
- * is monospaced.
- *
- * Returns: %TRUE when selection is monospaced, %FALSE otherwise.
- *
- * Since: 3.22
- **/
-gboolean
-e_content_editor_is_monospaced (EContentEditor *editor)
-{
-	gboolean value = FALSE;
-
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
-
-	g_object_get (G_OBJECT (editor), "monospaced", &value, NULL);
 
 	return value;
 }
@@ -3346,6 +3288,35 @@ e_content_editor_page_get_visited_link_color (EContentEditor *editor,
 	g_return_if_fail (iface->page_get_visited_link_color != NULL);
 
 	return iface->page_get_visited_link_color (editor, value);
+}
+
+void
+e_content_editor_page_set_font_name (EContentEditor *editor,
+				     const gchar *value)
+{
+	EContentEditorInterface *iface;
+
+	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
+
+	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
+	g_return_if_fail (iface != NULL);
+	g_return_if_fail (iface->page_set_font_name != NULL);
+
+	iface->page_set_font_name (editor, value);
+}
+
+const gchar *
+e_content_editor_page_get_font_name (EContentEditor *editor)
+{
+	EContentEditorInterface *iface;
+
+	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), NULL);
+
+	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
+	g_return_val_if_fail (iface != NULL, NULL);
+	g_return_val_if_fail (iface->page_get_font_name != NULL, NULL);
+
+	return iface->page_get_font_name (editor);
 }
 
 /* uri could be NULL -> removes the current image */
