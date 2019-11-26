@@ -327,6 +327,7 @@ var EvoUndoRedo = {
 	delete all nodes between index >= firstChildIndex && index < children.length - restChildrenCount.
 	*/
 
+	dropTarget : null, // passed from drop_cb() into before_input_cb()/input_cb() for "insertFromDrop" event
 	disabled : 0,
 	ongoingRecordings : [] // the recordings can be nested
 };
@@ -336,6 +337,7 @@ EvoUndoRedo.Attach = function()
 	if (document.documentElement) {
 		document.documentElement.onbeforeinput = EvoUndoRedo.before_input_cb;
 		document.documentElement.oninput = EvoUndoRedo.input_cb;
+		document.documentElement.ondrop = EvoUndoRedo.drop_cb;
 	}
 }
 
@@ -344,6 +346,7 @@ EvoUndoRedo.Detach = function()
 	if (document.documentElement) {
 		document.documentElement.onbeforeinput = null;
 		document.documentElement.oninput = null;
+		document.documentElement.ondrop = null;
 	}
 }
 
@@ -383,6 +386,9 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 
 	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
 		opType += "::WordDelim";
+
+	if (opType == "insertFromDrop")
+		startNode = EvoUndoRedo.dropTarget;
 
 	if (document.getSelection().isCollapsed) {
 		if (opType == "deleteWordBackward") {
@@ -468,6 +474,14 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	}
 
 	EvoEditor.forceFormatStateUpdate = EvoEditor.forceFormatStateUpdate || opType == "" || opType.startsWith("format");
+
+	if (opType == "insertFromDrop")
+		EvoUndoRedo.dropTarget = null;
+}
+
+EvoUndoRedo.drop_cb = function(event)
+{
+	EvoUndoRedo.dropTarget = event.toElement;
 }
 
 EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
@@ -633,6 +647,25 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 	var record = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
 
+	if (record.kind != kind || record.opType != opType) {
+		var ii;
+
+		for (ii = EvoUndoRedo.ongoingRecordings.length - 2; ii >= 0; ii--) {
+			record = EvoUndoRedo.ongoingRecordings[ii];
+
+			if (record.kind == kind && record.opType == opType) {
+				var jj;
+
+				for (jj = ii + 1; jj < EvoUndoRedo.ongoingRecordings.length; jj++) {
+					EvoUndoRedo.ongoingRecordings[jj - 1] = EvoUndoRedo.ongoingRecordings[jj];
+				}
+
+				EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1] = record;
+				break;
+			}
+		}
+	}
+
 	if (record.kind != kind) {
 		throw "EvoUndoRedo:StopRecord: Mismatch in record kind, expected " + record.kind + ", but received " + kind;
 	}
@@ -700,7 +733,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 	record.selectionAfter = EvoSelection.Store(document);
 
-	if (EvoUndoRedo.ongoingRecordings.length) {
+	if (EvoUndoRedo.ongoingRecordings.length && EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1].kind == EvoUndoRedo.RECORD_KIND_GROUP) {
 		var parentRecord = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
 		var records = parentRecord.records;
 
