@@ -100,20 +100,20 @@ static struct _SupportedFonts {
 	const gchar *display_name;
 	const gchar *css_value;
 } supported_fonts[] = {
-	{ "Georgia", "Georgia, serif" },
-	{ "Palatino", "\"Palatino Linotype\", \"Book Antiqua\", Palatino, serif" },
-	{ "Times New Roman", "\"Times New Roman\", Times, serif" },
 	{ "Arial", "Arial, Helvetica, sans-serif" },
 	{ "Arial Black", "\"Arial Black\", Gadget, sans-serif" },
 	{ "Comic Sans MS", "\"Comic Sans MS\", cursive, sans-serif" },
-	{ "Impact", "Impact, Charcoal, sans-serif" },
-	{ "Lucida Sans", "\"Lucida Sans Unicode\", \"Lucida Grande\", sans-serif" },
-	{ "Tahoma", "Tahoma, Geneva, sans-serif" },
-	{ "Trebuchet MS", "\"Trebuchet MS\", Helvetica, sans-serif" },
-	{ "Verdana", "Verdana, Geneva, sans-serif" },
-	{ "Monospace", "monospace" },
 	{ "Courier New", "\"Courier New\", Courier, monospace" },
-	{ "Lucida Console", "\"Lucida Console\", Monaco, monospace" }
+	{ "Georgia", "Georgia, serif" },
+	{ "Impact", "Impact, Charcoal, sans-serif" },
+	{ "Lucida Console", "\"Lucida Console\", Monaco, monospace" },
+	{ "Lucida Sans", "\"Lucida Sans Unicode\", \"Lucida Grande\", sans-serif" },
+	{ "Monospace", "monospace" },
+	{ "Palatino", "\"Palatino Linotype\", \"Book Antiqua\", Palatino, serif" },
+	{ "Tahoma", "Tahoma, Geneva, sans-serif" },
+	{ "Times New Roman", "\"Times New Roman\", Times, serif" },
+	{ "Trebuchet MS", "\"Trebuchet MS\", Helvetica, sans-serif" },
+	{ "Verdana", "Verdana, Geneva, sans-serif" }
 };
 
 GtkWidget *
