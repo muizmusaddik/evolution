@@ -63,7 +63,9 @@ enum {
 	PROP_STRIKETHROUGH,
 	PROP_SUBSCRIPT,
 	PROP_SUPERSCRIPT,
-	PROP_UNDERLINE
+	PROP_UNDERLINE,
+
+	PROP_NORMAL_PARAGRAPH_WIDTH
 };
 
 struct _EWebKitEditorPrivate {
@@ -73,7 +75,6 @@ struct _EWebKitEditorPrivate {
 	GCancellable *cancellable;
 	EWebExtensionContainer *container;
 	GDBusProxy *web_extension_proxy;
-	guint web_extension_user_changed_default_colors_cb_id;
 
 	gboolean html_mode;
 	gboolean changed;
@@ -110,6 +111,7 @@ struct _EWebKitEditorPrivate {
 	gchar *body_font_name;
 
 	guint font_size;
+	gint normal_paragraph_width;
 
 	EContentEditorBlockFormat block_format;
 	EContentEditorAlignment alignment;
@@ -1056,7 +1058,7 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"  border-collapse: collapse;\n"
 		"  width: %dch;\n"
 		"}\n",
-		g_settings_get_int (wk_editor->priv->mail_settings, "composer-word-wrap-length"));
+		wk_editor->priv->normal_paragraph_width);
 
 	g_string_append (
 		stylesheet,
@@ -1085,7 +1087,7 @@ webkit_editor_update_styles (EContentEditor *editor)
 		stylesheet,
 		"body[data-evo-plain-text] ul > li::before "
 		"{\n"
-		"  content: \"*"UNICODE_NBSP"\";\n"
+		"  content: \"*" UNICODE_NBSP "\";\n"
 		"}\n");
 
 	g_string_append_printf (
@@ -1122,27 +1124,6 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"{\n"
 		"  -webkit-padding-start: %dch; \n"
 		"}\n", SPACES_PER_LIST_LEVEL);
-
-	g_string_append (
-		stylesheet,
-		".-x-evo-align-left "
-		"{\n"
-		"  text-align: left; \n"
-		"}\n");
-
-	g_string_append (
-		stylesheet,
-		".-x-evo-align-center "
-		"{\n"
-		"  text-align: center; \n"
-		"}\n");
-
-	g_string_append (
-		stylesheet,
-		".-x-evo-align-right "
-		"{\n"
-		"  text-align: right; \n"
-		"}\n");
 
 	g_string_append (
 		stylesheet,
@@ -2192,7 +2173,7 @@ webkit_editor_selection_indent (EContentEditor *editor)
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-		"EvoEditor.Indent(+1);");
+		"EvoEditor.Indent(true);");
 }
 
 static void
@@ -2203,7 +2184,7 @@ webkit_editor_selection_unindent (EContentEditor *editor)
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-		"EvoEditor.Indent(-1);");
+		"EvoEditor.Indent(false);");
 }
 
 static void
@@ -5140,6 +5121,31 @@ webkit_editor_process_uri_request_cb (WebKitURISchemeRequest *request,
 }
 
 static void
+webkit_editor_set_normal_paragraph_width (EWebKitEditor *wk_editor,
+					  gint value)
+{
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+
+	if (wk_editor->priv->normal_paragraph_width != value) {
+		wk_editor->priv->normal_paragraph_width = value;
+
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.SetNormalParagraphWidth(%d);",
+			value);
+
+		g_object_notify (G_OBJECT (wk_editor), "normal-paragraph-width");
+	}
+}
+
+static gint
+webkit_editor_get_normal_paragraph_width (EWebKitEditor *wk_editor)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), -1);
+
+	return wk_editor->priv->normal_paragraph_width;
+}
+
+static void
 e_webkit_editor_initialize_web_extensions_cb (WebKitWebContext *web_context,
 					      gpointer user_data)
 {
@@ -5160,6 +5166,7 @@ webkit_editor_constructed (GObject *object)
 	WebKitSettings *web_settings;
 	WebKitWebView *web_view;
 	WebKitUserContentManager *manager;
+	GSettings *settings;
 
 	wk_editor = E_WEBKIT_EDITOR (object);
 	web_view = WEBKIT_WEB_VIEW (wk_editor);
@@ -5205,6 +5212,13 @@ webkit_editor_constructed (GObject *object)
 	web_settings = webkit_web_view_get_settings (web_view);
 	webkit_settings_set_allow_file_access_from_file_urls (web_settings, TRUE);
 	webkit_settings_set_enable_developer_extras (web_settings, e_util_get_webkit_developer_mode_enabled ());
+
+	settings = e_util_ref_settings ("org.gnome.evolution.mail");
+	g_settings_bind (
+		settings, "composer-word-wrap-length",
+		wk_editor, "normal-paragraph-width",
+		G_SETTINGS_BIND_GET);
+	g_object_unref (settings);
 
 	e_webkit_editor_load_data (wk_editor, "");
 }
@@ -5386,6 +5400,12 @@ webkit_editor_set_property (GObject *object,
 				g_value_get_boolean (value));
 			return;
 
+		case PROP_NORMAL_PARAGRAPH_WIDTH:
+			webkit_editor_set_normal_paragraph_width (
+				E_WEBKIT_EDITOR (object),
+				g_value_get_int (value));
+			return;
+
 		case PROP_ALIGNMENT:
 			webkit_editor_set_alignment (
 				E_WEBKIT_EDITOR (object),
@@ -5557,6 +5577,11 @@ webkit_editor_get_property (GObject *object,
 			g_value_set_boolean (
 				value, webkit_editor_is_editable (
 				E_WEBKIT_EDITOR (object)));
+			return;
+
+		case PROP_NORMAL_PARAGRAPH_WIDTH:
+			g_value_set_int (value,
+				webkit_editor_get_normal_paragraph_width (E_WEBKIT_EDITOR (object)));
 			return;
 
 		case PROP_ALIGNMENT:
@@ -6417,6 +6442,20 @@ e_webkit_editor_class_init (EWebKitEditorClass *class)
 		object_class, PROP_LAST_ERROR, "last-error");
 	g_object_class_override_property (
 		object_class, PROP_SPELL_CHECKER, "spell-checker");
+
+	g_object_class_install_property (
+		object_class,
+		PROP_NORMAL_PARAGRAPH_WIDTH,
+		g_param_spec_int (
+			"normal-paragraph-width",
+			NULL,
+			NULL,
+			G_MININT32,
+			G_MAXINT32,
+			71, /* Should be the same as e-editor.js:EvoEditor.NORMAL_PARAGRAPH_WIDTH */
+			G_PARAM_READWRITE |
+			G_PARAM_CONSTRUCT |
+			G_PARAM_STATIC_STRINGS));
 }
 
 static void
@@ -6539,8 +6578,7 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 
 	wk_editor->priv->start_bottom = E_THREE_STATE_INCONSISTENT;
 	wk_editor->priv->top_signature = E_THREE_STATE_INCONSISTENT;
-
-	wk_editor->priv->web_extension_user_changed_default_colors_cb_id = 0;
+	wk_editor->priv->normal_paragraph_width = 71; /* Should be the same as e-editor.js:EvoEditor.NORMAL_PARAGRAPH_WIDTH */
 }
 
 static void

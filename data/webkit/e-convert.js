@@ -177,10 +177,18 @@ EvoConvert.replaceList = function(element, tagName)
 					level++;
 			}
 
-			if (!(level % 2))
+			switch (level % 2) {
+			default:
+			case 0:
 				prefixSuffix = " * ";
-			else
-				prefixSuffix = " # ";
+				break;
+			case 1:
+				prefixSuffix = " - ";
+				break;
+			case 2:
+				prefixSuffix = " + ";
+				break;
+			}
 
 			indent = 3;
 		} else {

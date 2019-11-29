@@ -322,6 +322,9 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 			if (Number.isInteger(tmp)) {
 				obj.indented = tmp > 0;
 			}
+
+			if (parent.tagName == "UL" || parent.tagName == "OL")
+				obj.indented = true;
 		}
 
 		if (obj.bgColor == null && parent.style.backgroundColor != "") {
@@ -414,16 +417,16 @@ EvoEditor.foreachChildRecur = function(topParent, parent, firstChildIndex, lastC
 	while (child && ii >= 0) {
 		next = child.nextElementSibling;
 
-		if (!traversar.onlyBlockElements || EvoEditor.IsBlockNode(child)) {
-			if (!traversar.exec(topParent, child)) {
-				return false;
-			}
-		}
-
 		if (child.children.length > 0 &&
 		    !traversar.flat &&
 		    !EvoEditor.foreachChildRecur(topParent, child, 0, child.children.length - 1, traversar)) {
 			return false;
+		}
+
+		if (!traversar.onlyBlockElements || EvoEditor.IsBlockNode(child)) {
+			if (!traversar.exec(topParent, child)) {
+				return false;
+			}
 		}
 
 		child = next;
@@ -651,6 +654,12 @@ EvoEditor.RestoreSelection = function()
 	}
 }
 
+EvoEditor.removeEmptyStyleAttribute = function(element)
+{
+	if (element && !element.style.length)
+		element.removeAttribute("style");
+}
+
 EvoEditor.applySetAlignment = function(record, isUndo)
 {
 	if (record.changes) {
@@ -662,14 +671,23 @@ EvoEditor.applySetAlignment = function(record, isUndo)
 		}
 
 		for (ii = 0; ii < record.changes.length; ii++) {
-			var change = record.changes[ii];
+			var change = record.changes[isUndo ? (record.changes.length - ii - 1) : ii];
 
 			child = EvoSelection.FindElementByPath(parent, change.path);
 			if (!child) {
 				throw "EvoEditor.applySetAlignment: Cannot find child";
 			}
 
-			child.style.textAlign = isUndo ? change.before : record.applyValueAfter;
+			if (isUndo) {
+				child.style.textAlign = change.before;
+			} else if ((record.applyValueAfter == "left" && child.style.direction != "rtl" && window.getComputedStyle(child).direction != "rtl") ||
+				   (record.applyValueAfter == "right" && (child.style.direction == "rtl" || window.getComputedStyle(child).direction == "rtl"))) {
+				child.style.textAlign = "";
+			} else {
+				child.style.textAlign = record.applyValueAfter;
+			}
+
+			EvoEditor.removeEmptyStyleAttribute(child);
 		}
 	}
 }
@@ -699,7 +717,15 @@ EvoEditor.SetAlignment = function(alignment)
 				}
 
 				traversar.anyChanged = true;
-				element.style.textAlign = traversar.toSet;
+
+				if ((traversar.toSet == "left" && element.style.direction != "rtl" && window.getComputedStyle(element).direction != "rtl") ||
+				    (traversar.toSet == "right" && (element.style.direction == "rtl" || window.getComputedStyle(element).direction == "rtl"))) {
+					element.style.textAlign = "";
+				} else {
+					element.style.textAlign = traversar.toSet;
+				}
+
+				EvoEditor.removeEmptyStyleAttribute(element);
 			}
 
 			return true;
@@ -993,6 +1019,91 @@ EvoEditor.SetBlockFormat = function(format)
 	}
 }
 
+EvoEditor.allChildrenInSelection = function(element, allowPartial, affected)
+{
+	if (!element || !element.firstChild)
+		return false;
+
+	var selection = document.getSelection(), all;
+
+	all = selection.containsNode(element.firstElementChild, allowPartial) &&
+	      selection.containsNode(element.lastElementChild, allowPartial);
+
+	var node;
+
+	affected.length = 0;
+
+	for (node = element.firstElementChild; node; node = node.nextElementSibling) {
+		if (all || selection.containsNode(node, allowPartial))
+			affected[affected.length] = node;
+	}
+
+	return all;
+}
+
+EvoEditor.splitList = function(element, nParents, onlyAffected)
+{
+	var parent, from;
+
+	if (onlyAffected && onlyAffected.length)
+		from = onlyAffected[onlyAffected.length - 1].nextElementSibling;
+	else
+		from = element.nextElementSibling;
+
+	if (nParents == -1) {
+		nParents = 0;
+
+		for (parent = from; parent && parent.tagName != "BODY"; parent = parent.parentElement) {
+			nParents++;
+		}
+	}
+
+	var nextFrom, clone;
+
+	parent = from ? from.parentElement : element.parentElement;
+
+	while (nParents > 0 && parent && parent.tagName != "HTML") {
+		nParents--;
+		nextFrom = null;
+
+		if (from) {
+			clone = from.parentElement.cloneNode(false);
+			from.parentElement.parentElement.insertBefore(clone, from.parentElement.nextElementSibling);
+
+			nextFrom = clone;
+
+			while (from.nextElementSibling) {
+				clone.appendChild(from.nextElementSibling);
+			}
+
+			clone.insertBefore(from, clone.firstElementChild);
+		}
+
+		from = nextFrom;
+		parent = parent.parentElement;
+	}
+
+	if (nextFrom)
+		return nextFrom;
+
+	return parent.nextElementSibling;
+}
+
+EvoEditor.insertListChildBefore = function(child, parent, insBefore)
+{
+	if (child.tagName == "LI") {
+		var node = document.createElement("DIV");
+
+		while(child.firstChild)
+			node.appendChild(child.firstChild);
+
+		parent.insertBefore(node, insBefore);
+		child.parentElement.removeChild(child);
+	} else {
+		parent.insertBefore(child, insBefore);
+	}
+}
+
 EvoEditor.applyIndent = function(record, isUndo)
 {
 	if (record.changes) {
@@ -1004,11 +1115,16 @@ EvoEditor.applyIndent = function(record, isUndo)
 		}
 
 		for (ii = 0; ii < record.changes.length; ii++) {
-			var change = record.changes[ii];
+			var change = record.changes[isUndo ? (record.changes.length - ii - 1) : ii];
 
-			child = EvoSelection.FindElementByPath(parent, change.path);
+			child = EvoSelection.FindElementByPath(change.pathIsFromBody ? document.body : parent, change.path);
 			if (!child) {
 				throw "EvoEditor.applyIndent: Cannot find child";
+			}
+
+			if (change.isList) {
+				EvoUndoRedo.RestoreChildren(change, child, isUndo);
+				continue;
 			}
 
 			if (isUndo) {
@@ -1018,6 +1134,8 @@ EvoEditor.applyIndent = function(record, isUndo)
 				child.style.marginLeft = change.afterMarginLeft;
 				child.style.marginRight = change.afterMarginRight;
 			}
+
+			EvoEditor.removeEmptyStyleAttribute(child);
 		}
 	}
 }
@@ -1026,63 +1144,203 @@ EvoEditor.Indent = function(increment)
 {
 	var traversar = {
 		record : null,
+		selectionUpdater : null,
 		increment : increment,
 
-		flat : false,
+		flat : true,
 		onlyBlockElements : true,
 
 		exec : function(parent, element) {
-			var change = null;
+			var change = null, isList = element.tagName == "UL" || element.tagName == "OL";
+			var isNested = isList && (element.parentElement.tagName == "UL" || element.parentElement.tagName == "OL");
 
 			if (traversar.record) {
 				if (!traversar.record.changes)
 					traversar.record.changes = [];
 
 				change = {};
-				change.path = EvoSelection.GetChildPath(parent, element);
-				change.beforeMarginLeft = element.style.marginLeft;
-				change.beforeMarginRight = element.style.marginRight;
+
+				change.pathIsFromBody = false;
+
+				if (isList) {
+					change.isList = isList;
+					change.path = EvoSelection.GetChildPath(parent, element);
+				} else {
+					change.path = EvoSelection.GetChildPath(parent, element);
+					change.beforeMarginLeft = element.style.marginLeft;
+					change.beforeMarginRight = element.style.marginRight;
+				}
 
 				traversar.record.changes[traversar.record.changes.length] = change;
 			}
 
-			var currValue = null, dir;
+			if (isList) {
+				var elemParent = null, all, affected = [], jj;
 
-			dir = window.getComputedStyle(element).direction;
+				all = EvoEditor.allChildrenInSelection(element, true, affected);
 
-			if (dir == "rtl") {
-				if (element.style.marginRight.endsWith("ch"))
-					currValue = element.style.marginRight;
-			} else { // "ltr" or other
-				if (element.style.marginLeft.endsWith("ch"))
-					currValue = element.style.marginLeft;
-			}
+				if (this.increment) {
+					var clone;
 
-			if (!currValue) {
-				currValue = 0;
+					clone = element.cloneNode(false);
+
+					if (all) {
+						if (change) {
+							var childIndex = EvoEditor.GetChildIndex(element.parentElement, element);
+							EvoUndoRedo.BackupChildrenBefore(change, element.parentElement, childIndex, childIndex);
+							change.path = EvoSelection.GetChildPath(parent, element.parentElement);
+						}
+
+						element.parentElement.insertBefore(clone, element);
+						clone.appendChild(element);
+
+						if (change)
+							EvoUndoRedo.BackupChildrenAfter(change, clone.parentElement);
+					} else if (affected.length > 0) {
+						if (change) {
+							EvoUndoRedo.BackupChildrenBefore(change, element,
+								EvoEditor.GetChildIndex(element, affected[0]),
+								EvoEditor.GetChildIndex(element, affected[affected.length - 1]));
+						}
+
+						element.insertBefore(clone, affected[0]);
+
+						for (jj = 0; jj < affected.length; jj++) {
+							clone.appendChild(affected[jj]);
+						}
+
+						if (change)
+							EvoUndoRedo.BackupChildrenAfter(change, element);
+					}
+				} else {
+					var insBefore = null;
+
+					elemParent = element.parentElement;
+
+					// decrease indent in nested lists of the same type will merge items into one list
+					if (isNested && elemParent.tagName == element.tagName &&
+					    elemParent.getAttribute("type") == element.getAttribute("type")) {
+						if (change) {
+							var childIndex = EvoEditor.GetChildIndex(elemParent, element);
+							EvoUndoRedo.BackupChildrenBefore(change, elemParent, childIndex, childIndex);
+							change.path = EvoSelection.GetChildPath(parent, elemParent);
+						}
+
+						if (!all && affected.length > 0 && !(affected[0] === element.firstElementChild)) {
+							insBefore = EvoEditor.splitList(element, 1, affected);
+						} else {
+							insBefore = element;
+						}
+
+						for (jj = 0; jj < affected.length; jj++) {
+							elemParent.insertBefore(affected[jj], insBefore);
+						}
+
+						if (!element.childElementCount) {
+							this.selectionUpdater.beforeRemove(element);
+
+							element.parentElement.removeChild(element);
+
+							this.selectionUpdater.afterRemove(affected[0]);
+						}
+
+						if (change)
+							EvoUndoRedo.BackupChildrenAfter(change, elemParent);
+					} else {
+						var tmpElement = element;
+
+						if (isNested) {
+							tmpElement = elemParent;
+							elemParent = elemParent.parentElement;
+						}
+
+						if (change) {
+							var childIndex = EvoEditor.GetChildIndex(elemParent, tmpElement);
+							EvoUndoRedo.BackupChildrenBefore(change, elemParent, childIndex, childIndex);
+							if (isNested) {
+								change.pathIsFromBody = true;
+								change.path = EvoSelection.GetChildPath(document.body, elemParent);
+							} else {
+								change.path = EvoSelection.GetChildPath(parent, elemParent);
+							}
+						}
+
+						if (isNested) {
+							var clone;
+
+							insBefore = EvoEditor.splitList(element, 2, affected);
+
+							clone = element.cloneNode(false);
+							elemParent.insertBefore(clone, insBefore);
+
+							for (jj = 0; jj < affected.length; jj++) {
+								clone.appendChild(affected[jj]);
+							}
+						} else {
+							if (!all && affected.length > 0 && !(affected[0] === element.firstElementChild)) {
+								insBefore = EvoEditor.splitList(element, 1, affected);
+							} else {
+								insBefore = element.nextElementSibling;
+							}
+
+							for (jj = 0; jj < affected.length; jj++) {
+								EvoEditor.insertListChildBefore(affected[jj], insBefore ? insBefore.parentElement : elemParent, insBefore);
+							}
+						}
+
+						if (!element.childElementCount) {
+							this.selectionUpdater.beforeRemove(element);
+
+							element.parentElement.removeChild(element);
+
+							this.selectionUpdater.afterRemove(insBefore ? insBefore.previousElementSibling : elemParent.lastElementChild);
+						}
+
+						if (change)
+							EvoUndoRedo.BackupChildrenAfter(change, elemParent);
+					}
+				}
 			} else {
-				currValue = parseInt(currValue.slice(0, -2));
-				if (!Number.isInteger(currValue))
+				var currValue = null, dir;
+
+				dir = window.getComputedStyle(element).direction;
+
+				if (dir == "rtl") {
+					if (element.style.marginRight.endsWith("ch"))
+						currValue = element.style.marginRight;
+				} else { // "ltr" or other
+					if (element.style.marginLeft.endsWith("ch"))
+						currValue = element.style.marginLeft;
+				}
+
+				if (!currValue) {
 					currValue = 0;
-			}
+				} else {
+					currValue = parseInt(currValue.slice(0, -2));
+					if (!Number.isInteger(currValue))
+						currValue = 0;
+				}
 
-			if (traversar.increment) {
-				currValue = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
-			} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
-				currValue = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
-			} else if (currValue > 0) {
-				currValue = "";
-			}
+				if (traversar.increment) {
+					currValue = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
+				} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
+					currValue = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
+				} else if (currValue > 0) {
+					currValue = "";
+				}
 
-			if (dir == "rtl") {
-				element.style.marginRight = currValue;
-			} else { // "ltr" or other
-				element.style.marginLeft = currValue;
-			}
+				if (dir == "rtl") {
+					element.style.marginRight = currValue;
+				} else { // "ltr" or other
+					element.style.marginLeft = currValue;
+				}
 
-			if (change) {
-				change.afterMarginLeft = element.style.marginLeft;
-				change.afterMarginRight = element.style.marginRight;
+				if (change) {
+					change.afterMarginLeft = element.style.marginLeft;
+					change.afterMarginRight = element.style.marginRight;
+				}
+
+				EvoEditor.removeEmptyStyleAttribute(element);
 			}
 
 			return true;
@@ -1092,6 +1350,7 @@ EvoEditor.Indent = function(increment)
 	var affected = EvoEditor.ClaimAffectedContent(null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
 	traversar.record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+	traversar.selectionUpdater = EvoSelection.CreateUpdaterObject();
 
 	try {
 		EvoEditor.ForeachChildInAffectedContent(affected, traversar);
@@ -1100,6 +1359,8 @@ EvoEditor.Indent = function(increment)
 			traversar.record.applyIncrement = increment;
 			traversar.record.apply = EvoEditor.applyIndent;
 		}
+
+		traversar.selectionUpdater.restore();
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, increment ? "Indent" : "Outdent");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
@@ -1163,8 +1424,10 @@ EvoEditor.applySetBodyFontName = function(record, isUndo)
 {
 	EvoEditor.UpdateStyleSheet("x-evo-body-fontname", isUndo ? record.beforeCSS : record.afterCSS);
 
-	if (record.beforeStyle != record.afterStyle)
+	if (record.beforeStyle != record.afterStyle) {
 		document.body.style.fontFamily = isUndo ? record.beforeStyle : record.afterStyle;
+		EvoEditor.removeEmptyStyleAttribute(body.document);
+	}
 }
 
 EvoEditor.SetBodyFontName = function(name)
@@ -1197,6 +1460,8 @@ EvoEditor.SetBodyFontName = function(name)
 			if (record.beforeCSS == record.afterCSS && record.beforeStyle == record.afterStyle)
 				record.ignore = true;
 		}
+
+		EvoEditor.removeEmptyStyleAttribute(document.body);
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "setBodyFontName");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_YES);
@@ -1238,6 +1503,7 @@ EvoEditor.convertParagraphs = function(parent, wrapWidth)
 		if (child.tagName == "DIV") {
 			if (wrapWidth == -1) {
 				child.style.width = "";
+				EvoEditor.removeEmptyStyleAttribute(child);
 			} else {
 				child.style.width = wrapWidth + "ch";
 			}
@@ -1253,6 +1519,7 @@ EvoEditor.convertParagraphs = function(parent, wrapWidth)
 		} else if (child.tagName == "UL") {
 			if (wrapWidth == -1) {
 				child.style.width = "";
+				EvoEditor.removeEmptyStyleAttribute(child);
 			} else {
 				var innerWrapWidth = wrapWidth;
 
@@ -1267,10 +1534,11 @@ EvoEditor.convertParagraphs = function(parent, wrapWidth)
 			if (wrapWidth == -1) {
 				child.style.width = "";
 				child.style.paddingInlineStart = "";
+				EvoEditor.removeEmptyStyleAttribute(child);
 			} else {
 				var innerWrapWidth = wrapWidth, olNeedWidth;
 
-				olNeedWidth = EvoEditor.GetOLMaxLetters(child.getAttribute("type"), child.children.length) + 2; // length of ". " suffix
+				olNeedWidth = EvoConvert.GetOLMaxLetters(child.getAttribute("type"), child.children.length) + 2; // length of ". " suffix
 
 				if (olNeedWidth < EvoConvert.MIN_OL_WIDTH)
 					olNeedWidth = EvoConvert.MIN_OL_WIDTH;
@@ -1339,28 +1607,15 @@ EvoEditor.applyFontReset = function(record, isUndo)
 	if (record.changes) {
 		var ii;
 
-		if (isUndo) {
-			for (ii = record.changes.length - 1; ii >= 0; ii--) {
-				var change = record.changes[ii];
-				var parent = EvoSelection.FindElementByPath(document.body, change.parentPath);
+		for (ii = 0; ii < record.changes.length; ii++) {
+			var change = record.changes[isUndo ? (record.changes.length - ii - 1) : ii];
+			var parent = EvoSelection.FindElementByPath(document.body, change.parentPath);
 
-				if (!parent) {
-					throw "EvoEditor.applyFontReset: Cannot find node at path " + change.path;
-				}
-
-				parent.innerHTML = change.htmlBefore;
+			if (!parent) {
+				throw "EvoEditor.applyFontReset: Cannot find node at path " + change.path;
 			}
-		} else {
-			for (ii = 0; ii < record.changes.length; ii++) {
-				var change = record.changes[ii];
-				var parent = EvoSelection.FindElementByPath(document.body, change.parentPath);
 
-				if (!parent) {
-					throw "EvoEditor.applyFontReset: Cannot find node at path " + change.path;
-				}
-
-				parent.innerHTML = change.htmlAfter;
-			}
+			parent.innerHTML = isUndo ? change.htmlBefore : change.htmlAfter;
 		}
 	}
 }
@@ -1485,6 +1740,8 @@ EvoEditor.SetFontName = function(name)
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "SetFontName");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
+
+		EvoEditor.removeEmptyStyleAttribute(document.body);
 	}
 }
 
@@ -1689,7 +1946,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 			content_data["to-send-html"] = EvoEditor.convertHtmlToSend();
 
 		if ((flags & EvoEditor.	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN) != 0) {
-			content_data["to-send-plain"] = EvoConvert.ToPlainText(document.body);
+			content_data["to-send-plain"] = EvoConvert.ToPlainText(document.body, EvoEditor.NORMAL_PARAGRAPH_WIDTH);
 		}
 	} finally {
 		try {

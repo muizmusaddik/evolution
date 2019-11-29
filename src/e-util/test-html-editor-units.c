@@ -193,13 +193,14 @@ test_justify_selection (TestFixture *fixture)
 		"seq:d\n"
 		"action:justify-left\n",
 		HTML_PREFIX
-			"<div style=\"text-align: center\">center</div>"
-			"<div style=\"text-align: right\">right</div>"
+			"<div style=\"text-align: center;\">center</div>"
+			"<div style=\"text-align: right;\">right</div>"
 			"<div>left</div><div><br></div>"
 		HTML_SUFFIX,
 		"                                center\n"
 		"                                                                  right\n"
-		"left\n"))
+		"left\n"
+		"\n"))
 		g_test_fail ();
 }
 
@@ -215,13 +216,14 @@ test_justify_typed (TestFixture *fixture)
 		"action:justify-left\n"
 		"type:left\\n\n",
 		HTML_PREFIX
-			"<div style=\"text-align: center\">center</div>"
-			"<div style=\"text-align: right\">right</div>"
+			"<div style=\"text-align: center;\">center</div>"
+			"<div style=\"text-align: right;\">right</div>"
 			"<div>left</div><div><br></div>"
 		HTML_SUFFIX,
 		"                                center\n"
 		"                                                                  right\n"
-		"left\n"))
+		"left\n"
+		"\n"))
 		g_test_fail ();
 }
 
@@ -245,16 +247,16 @@ test_indent_selection (TestFixture *fixture)
 		"action:unindent\n",
 		HTML_PREFIX
 			"<div>level 0</div>"
-			"<div style=\"margin-left: 3ch;\">"
-				"<div>level 1</div>"
-				"<div style=\"margin-left: 3ch;\"><div>level 2</div></div>"
-				"<div>level 1</div>"
-			"</div><div><br></div>"
+			"<div style=\"margin-left: 3ch;\">level 1</div>"
+			"<div style=\"margin-left: 6ch;\">level 2</div>"
+			"<div style=\"margin-left: 3ch;\">level 1</div>"
+			"<div><br></div>"
 		HTML_SUFFIX,
 		"level 0\n"
 		"   level 1\n"
 		"      level 2\n"
-		"   level 1\n"))
+		"   level 1\n"
+		"\n"))
 		g_test_fail ();
 }
 
@@ -273,16 +275,16 @@ test_indent_typed (TestFixture *fixture)
 		"action:unindent\n",
 		HTML_PREFIX
 			"<div>level 0</div>"
-			"<div style=\"margin-left: 3ch;\">"
-				"<div>level 1</div>"
-				"<div style=\"margin-left: 3ch;\"><div>level 2</div></div>"
-				"<div>level 1</div>"
-			"</div><div><br></div>"
+			"<div style=\"margin-left: 3ch;\">level 1</div>"
+			"<div style=\"margin-left: 6ch;\">level 2</div>"
+			"<div style=\"margin-left: 3ch;\">level 1</div>"
+			"<div><br></div>"
 		HTML_SUFFIX,
 		"level 0\n"
 		"   level 1\n"
 		"      level 2\n"
-		"   level 1\n"))
+		"   level 1\n"
+		"\n"))
 		g_test_fail ();
 }
 
@@ -306,9 +308,9 @@ test_font_size_selection (TestFixture *fixture)
 		"action:size-plus-three\n"
 		"seq:rrCSrcs\n"
 		"action:size-plus-four\n",
-		HTML_PREFIX "<div><font size=\"1\">FontM2</font> <font size=\"2\">FontM1</font> Font0 <font size=\"4\">FontP1</font> "
+		HTML_PREFIX "<div><font size=\"1\">FontM2</font> <font size=\"2\">FontM1</font> <font size=\"3\">Font0</font> <font size=\"4\">FontP1</font> "
 		"<font size=\"5\">FontP2</font> <font size=\"6\">FontP3</font> <font size=\"7\">FontP4</font></div>" HTML_SUFFIX,
-		"FontM2 FontM1 Font0 FontP1 FontP2 FontP3 FontP4"))
+		"FontM2 FontM1 Font0 FontP1 FontP2 FontP3 FontP4\n"))
 		g_test_fail ();
 }
 
@@ -343,9 +345,10 @@ test_font_size_typed (TestFixture *fixture)
 		"action:size-plus-four\n"
 		"type:FontP4\n"
 		"action:size-plus-zero\n",
-		HTML_PREFIX "<div><font size=\"1\">FontM2</font> <font size=\"2\">FontM1</font> Font0 <font size=\"4\">FontP1</font> "
-		"<font size=\"5\">FontP2</font> <font size=\"6\">FontP3</font> <font size=\"7\">FontP4</font><br></div>" HTML_SUFFIX,
-		"FontM2 FontM1 Font0 FontP1 FontP2 FontP3 FontP4"))
+		HTML_PREFIX "<div><font size=\"1\">FontM2</font><font size=\"3\"> </font><font size=\"2\">FontM1</font><font size=\"3\"> Font0 </font>"
+		"<font size=\"4\">FontP1</font><font size=\"3\"> </font><font size=\"5\">FontP2</font><font size=\"3\"> </font>"
+		"<font size=\"6\">FontP3</font><font size=\"3\"> </font><font size=\"7\">FontP4</font></div>" HTML_SUFFIX,
+		"FontM2 FontM1 Font0 FontP1 FontP2 FontP3 FontP4\n"))
 		g_test_fail ();
 }
 
@@ -405,7 +408,7 @@ test_font_color_selection (TestFixture *fixture)
 	if (!test_utils_run_simple_test (fixture, "",
 		HTML_PREFIX "<div>default <font color=\"#ff0000\">red</font> <font color=\"#00ff00\">green</font> "
 		"<font color=\"#0000ff\">blue</font></div>" HTML_SUFFIX,
-		"default red green blue"))
+		"default red green blue\n"))
 		g_test_fail ();
 }
 
@@ -470,7 +473,7 @@ test_font_color_typed (TestFixture *fixture)
 	if (!test_utils_run_simple_test (fixture, "",
 		HTML_PREFIX "<div>default <font color=\"#ff0000\">red </font><font color=\"#00ff00\">green </font>"
 		"<font color=\"#0000ff\">blue</font></div>" HTML_SUFFIX,
-		"default red green blue"))
+		"default red green blue\n"))
 		g_test_fail ();
 }
 
@@ -489,7 +492,7 @@ test_list_bullet_plain (TestFixture *fixture)
 		" * item 1\n"
 		" * item 2\n"
 		" * item 3\n"
-		"text"))
+		"text\n"))
 		g_test_fail ();
 }
 
@@ -517,9 +520,9 @@ test_list_bullet_html (TestFixture *fixture)
 			"<div>text</div>"
 		HTML_SUFFIX,
 		" * item 1\n"
-		"    * item 2\n"
+		"    - item 2\n"
 		" * item 3\n"
-		"text"))
+		"text\n"))
 		g_test_fail ();
 }
 
@@ -531,7 +534,7 @@ test_list_bullet_change (TestFixture *fixture)
 		"action:style-list-bullet\n"
 		"action:style-list-number\n",
 		NULL,
-		"   1. "))
+		"   1. \n"))
 		g_test_fail ();
 }
 
@@ -559,7 +562,7 @@ test_list_bullet_html_from_block (TestFixture *fixture)
 		" * item 1\n"
 		" * item 2\n"
 		" * item 3\n"
-		" * "))
+		" * \n"))
 		g_test_fail ();
 }
 
@@ -589,7 +592,7 @@ test_list_alpha_html (TestFixture *fixture)
 		"   A. item 1\n"
 		"      A. item 2\n"
 		"   B. item 3\n"
-		"text"))
+		"text\n"))
 		g_test_fail ();
 }
 
@@ -610,7 +613,7 @@ test_list_alpha_plain (TestFixture *fixture)
 		"   A. item 1\n"
 		"      A. item 2\n"
 		"   B. item 3\n"
-		"text"))
+		"text\n"))
 		g_test_fail ();
 }
 
@@ -643,24 +646,24 @@ test_list_roman_html (TestFixture *fixture)
 		"<li>7</li><li>8</li><li>9</li><li>10</li><li>11</li><li>12</li>"
 		"<li>13</li><li>14</li><li>15</li><li>16</li><li>17</li><li>18</li>"
 		"</ol>" HTML_SUFFIX,
-		"   I. 1\n"
-		"  II. 2\n"
-		" III. 3\n"
-		"  IV. 4\n"
-		"   V. 5\n"
-		"  VI. 6\n"
-		" VII. 7\n"
-		"VIII. 8\n"
-		"  IX. 9\n"
-		"   X. 10\n"
-		"  XI. 11\n"
-		" XII. 12\n"
-		"XIII. 13\n"
-		" XIV. 14\n"
-		"  XV. 15\n"
-		" XVI. 16\n"
-		"XVII. 17\n"
-		"XVIII. 18"))
+		"    I. 1\n"
+		"   II. 2\n"
+		"  III. 3\n"
+		"   IV. 4\n"
+		"    V. 5\n"
+		"   VI. 6\n"
+		"  VII. 7\n"
+		" VIII. 8\n"
+		"   IX. 9\n"
+		"    X. 10\n"
+		"   XI. 11\n"
+		"  XII. 12\n"
+		" XIII. 13\n"
+		"  XIV. 14\n"
+		"   XV. 15\n"
+		"  XVI. 16\n"
+		" XVII. 17\n"
+		"XVIII. 18\n"))
 		g_test_fail ();
 }
 
@@ -689,24 +692,24 @@ test_list_roman_plain (TestFixture *fixture)
 		"type:17\\n\n"
 		"type:18\n",
 		NULL,
-		"   I. 1\n"
-		"  II. 2\n"
-		" III. 3\n"
-		"  IV. 4\n"
-		"   V. 5\n"
-		"  VI. 6\n"
-		" VII. 7\n"
-		"VIII. 8\n"
-		"  IX. 9\n"
-		"   X. 10\n"
-		"  XI. 11\n"
-		" XII. 12\n"
-		"XIII. 13\n"
-		" XIV. 14\n"
-		"  XV. 15\n"
-		" XVI. 16\n"
-		"XVII. 17\n"
-		"XVIII. 18"))
+		"    I. 1\n"
+		"   II. 2\n"
+		"  III. 3\n"
+		"   IV. 4\n"
+		"    V. 5\n"
+		"   VI. 6\n"
+		"  VII. 7\n"
+		" VIII. 8\n"
+		"   IX. 9\n"
+		"    X. 10\n"
+		"   XI. 11\n"
+		"  XII. 12\n"
+		" XIII. 13\n"
+		"  XIV. 14\n"
+		"   XV. 15\n"
+		"  XVI. 16\n"
+		" XVII. 17\n"
+		"XVIII. 18\n"))
 		g_test_fail ();
 }
 
@@ -737,7 +740,7 @@ test_list_multi_html (TestFixture *fixture)
 		" * item 2\n"
 		"   I. item 3\n"
 		"  II. item 4\n"
-		" III. "))
+		" III. \n"))
 		g_test_fail ();
 }
 
@@ -758,7 +761,7 @@ test_list_multi_plain (TestFixture *fixture)
 		" * item 2\n"
 		"   I. item 3\n"
 		"  II. item 4\n"
-		" III. "))
+		" III. \n"))
 		g_test_fail ();
 }
 
@@ -789,7 +792,7 @@ test_list_multi_change_html (TestFixture *fixture)
 		"   2. item 2\n"
 		"   3. item 3\n"
 		"   4. item 4\n"
-		"   5. "))
+		"   5. \n"))
 		g_test_fail ();
 }
 

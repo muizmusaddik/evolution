@@ -498,23 +498,13 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 		records = record.records;
 
 		if (records && records.length) {
-			if (isUndo) {
-				for (ii = records.length - 1; ii >= 0; ii--) {
-					EvoUndoRedo.applyRecord(records[ii], isUndo, false);
-				}
-			} else {
-				for (ii = 0; ii < records.length; ii++) {
-					EvoUndoRedo.applyRecord(records[ii], isUndo, false);
-				}
+			for (ii = 0; ii < records.length; ii++) {
+				EvoUndoRedo.applyRecord(records[isUndo ? (records.length - ii - 1) : ii], isUndo, false);
 			}
 		}
 
 		if (withSelection) {
-			if (isUndo) {
-				EvoSelection.Restore(document, record.selectionBefore);
-			} else {
-				EvoSelection.Restore(document, record.selectionAfter);
-			}
+			EvoSelection.Restore(document, isUndo ? record.selectionBefore : record.selectionAfter);
 		}
 
 		return;
@@ -536,67 +526,18 @@ EvoUndoRedo.applyRecord = function(record, isUndo, withSelection)
 		} else if (kind == EvoUndoRedo.RECORD_KIND_CUSTOM && record.apply != null) {
 			record.apply(record, isUndo);
 		} else {
-			var commonParent, first, last, ii;
+			var commonParent;
 
 			commonParent = EvoSelection.FindElementByPath(document.body, record.path);
 			if (!commonParent) {
 				throw "EvoUndoRedo::applyRecord: Cannot find parent at path " + record.path;
 			}
 
-			first = record.firstChildIndex;
-
-			if (first == -1) {
-				if (isUndo) {
-					commonParent.innerHTML = record.htmlBefore;
-				} else {
-					commonParent.innerHTML = record.htmlAfter;
-				}
-			} else {
-				// it can equal to the children.length, when the node had been removed
-				if (first < 0 || first > commonParent.children.length) {
-					throw "EvoUndoRedo::applyRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
-				}
-
-				last = commonParent.children.length - record.restChildrenCount;
-				if (last < 0 || last < first) {
-					throw "EvoUndoRedo::applyRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
-						commonParent.children.length + " first:" + first + " last:" + last + ")";
-				}
-
-				for (ii = last - 1; ii >= first; ii--) {
-					if (ii >= 0 && ii < commonParent.children.length) {
-						commonParent.removeChild(commonParent.children.item(ii));
-					}
-				}
-
-				var tmpNode = document.createElement("evo-tmp");
-
-				if (isUndo) {
-					tmpNode.innerHTML = record.htmlBefore;
-				} else {
-					tmpNode.innerHTML = record.htmlAfter;
-				}
-
-				if (first < commonParent.children.length) {
-					first = commonParent.children.item(first);
-
-					while(tmpNode.firstElementChild) {
-						commonParent.insertBefore(tmpNode.firstElementChild, first);
-					}
-				} else {
-					while(tmpNode.children.length) {
-						commonParent.appendChild(tmpNode.children.item(0));
-					}
-				}
-			}
+			EvoUndoRedo.RestoreChildren(record, commonParent, isUndo);
 		}
 
 		if (withSelection) {
-			if (isUndo) {
-				EvoSelection.Restore(document, record.selectionBefore);
-			} else {
-				EvoSelection.Restore(document, record.selectionAfter);
-			}
+			EvoSelection.Restore(document, isUndo ? record.selectionBefore : record.selectionAfter);
 		}
 	} finally {
 		EvoUndoRedo.Enable();
@@ -647,6 +588,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 
 	var record = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];
 
+	// Events can overlap sometimes, like when doing drag&drop inside web view
 	if (record.kind != kind || record.opType != opType) {
 		var ii;
 
@@ -688,7 +630,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	if (kind == EvoUndoRedo.RECORD_KIND_DOCUMENT) {
 		record.htmlAfter = document.documentElement.innerHTML;
 	} else if (record.htmlBefore != window.undefined) {
-		var commonParent, first, last, ii, html = "";
+		var commonParent;
 
 		commonParent = EvoSelection.FindElementByPath(document.body, record.path);
 
@@ -696,39 +638,16 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 			throw "EvoUndoRedo.StopRecord:: Failed to stop '" + opType + "', cannot find common parent";
 		}
 
-		first = record.firstChildIndex;
-
-		if (first == -1) {
-			html = commonParent.innerHTML;
-		} else {
-			// it can equal to the children.length, when the node had been removed
-			if (first < 0 || first > commonParent.children.length) {
-				throw "EvoUndoRedo::StopRecord: firstChildIndex (" + first + ") out of bounds (" + commonParent.children.length + ")";
-			}
-
-			last = commonParent.children.length - record.restChildrenCount;
-			if (last < 0 || last < first) {
-				throw "EvoUndoRedo::StopRecord: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
-					commonParent.children.length + " first:" + first + " last:" + last + ")";
-			}
-
-			for (ii = first; ii < last; ii++) {
-				if (ii >= 0 && ii < commonParent.children.length) {
-					html += commonParent.children.item(ii).outerHTML;
-				}
-			}
-		}
+		EvoUndoRedo.BackupChildrenAfter(record, commonParent);
 
 		// some formatting commands do not change HTML structure immediately, thus ignore those
-		if (kind == EvoUndoRedo.RECORD_KIND_EVENT && record.htmlBefore == html) {
+		if (kind == EvoUndoRedo.RECORD_KIND_EVENT && record.htmlBefore == record.htmlAfter) {
 			if (!EvoUndoRedo.ongoingRecordings.length && record.opType != "insertText") {
 				EvoUndoRedo.stack.maybeMergeInsertText(false);
 			}
 
 			return false;
 		}
-
-		record.htmlAfter = html;
 	}
 
 	record.selectionAfter = EvoSelection.Store(document);
@@ -821,6 +740,138 @@ EvoUndoRedo.GroupTopRecords = function(nRecords, opType)
 		group.records = group.records.reverse();
 
 		EvoUndoRedo.stack.push(group);
+	}
+}
+
+/* Backs up all the children elements between firstChildIndex and lastChildIndex inclusive,
+   saving their HTML content into record.htmlBefore; it stores only element children,
+   not text or other nodes. Use also EvoUndoRedo.BackupChildrenAfter() to save all data
+   needed by EvoUndoRedo.RestoreChildren(), which is used to restore saved data.
+   The firstChildIndex can be -1, to back up parent's innerHTML.
+*/
+EvoUndoRedo.BackupChildrenBefore = function(record, parent, firstChildIndex, lastChildIndex)
+{
+	record.firstChildIndex = firstChildIndex;
+
+	if (firstChildIndex == -1) {
+		record.htmlBefore = parent.innerHTML;
+		return;
+	}
+
+	record.htmlBefore = "";
+
+	var ii;
+
+	for (ii = firstChildIndex; ii < parent.children.length; ii++) {
+		record.htmlBefore += parent.children[ii].outerHTML;
+
+		if (ii == lastChildIndex) {
+			ii++;
+			break;
+		}
+	}
+
+	record.restChildrenCount = parent.children.length - ii;
+}
+
+EvoUndoRedo.BackupChildrenAfter = function(record, parent)
+{
+	if (record.firstChildIndex == undefined)
+		throw "EvoUndoRedo.BackupChildrenAfter: 'record' doesn't contain 'firstChildIndex' property";
+	if (record.firstChildIndex != -1 && record.restChildrenCount == undefined)
+		throw "EvoUndoRedo.BackupChildrenAfter: 'record' doesn't contain 'restChildrenCount' property";
+	if (record.htmlBefore == undefined)
+		throw "EvoUndoRedo.BackupChildrenAfter: 'record' doesn't contain 'htmlBefore' property";
+
+	if (record.firstChildIndex == -1) {
+		record.htmlAfter = parent.innerHTML;
+		return;
+	}
+
+	record.htmlAfter = "";
+
+	var ii, first, last;
+
+	first = record.firstChildIndex;
+
+	// it can equal to the children.length, when the node had been removed
+	if (first < 0 || first > parent.children.length) {
+		throw "EvoUndoRedo.BackupChildrenAfter: firstChildIndex (" + first + ") out of bounds (" + parent.children.length + ")";
+	}
+
+	last = parent.children.length - record.restChildrenCount;
+	if (last < 0 || last < first) {
+		throw "EvoUndoRedo::BackupChildrenAfter: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+			parent.children.length + " first:" + first + " last:" + last + ")";
+	}
+
+	for (ii = first; ii < last; ii++) {
+		if (ii >= 0 && ii < parent.children.length) {
+			record.htmlAfter += parent.children[ii].outerHTML;
+		}
+	}
+}
+
+// restores content of 'parent' based on the information saved by EvoUndoRedo.BackupChildrenBefore()
+// and EvoUndoRedo.BackupChildrenAfter()
+EvoUndoRedo.RestoreChildren = function(record, parent, isUndo)
+{
+	var first, last, ii;
+
+	if (record.firstChildIndex == undefined)
+		throw "EvoUndoRedo.RestoreChildren: 'record' doesn't contain 'firstChildIndex' property";
+	if (record.firstChildIndex != -1 && record.restChildrenCount == undefined)
+		throw "EvoUndoRedo.RestoreChildren: 'record' doesn't contain 'restChildrenCount' property";
+	if (record.htmlBefore == undefined)
+		throw "EvoUndoRedo.RestoreChildren: 'record' doesn't contain 'htmlBefore' property";
+	if (record.htmlAfter == undefined)
+		throw "EvoUndoRedo.RestoreChildren: 'record' doesn't contain 'htmlAfter' property";
+
+	first = record.firstChildIndex;
+
+	if (first == -1) {
+		if (isUndo) {
+			parent.innerHTML = record.htmlBefore;
+		} else {
+			parent.innerHTML = record.htmlAfter;
+		}
+	} else {
+		// it can equal to the children.length, when the node had been removed
+		if (first < 0 || first > parent.children.length) {
+			throw "EvoUndoRedo::RestoreChildren: firstChildIndex (" + first + ") out of bounds (" + parent.children.length + ")";
+		}
+
+		last = parent.children.length - record.restChildrenCount;
+		if (last < 0 || last < first) {
+			throw "EvoUndoRedo::RestoreChildren: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+				parent.children.length + " first:" + first + " last:" + last + ")";
+		}
+
+		for (ii = last - 1; ii >= first; ii--) {
+			if (ii >= 0 && ii < parent.children.length) {
+				parent.removeChild(parent.children[ii]);
+			}
+		}
+
+		var tmpNode = document.createElement("evo-tmp");
+
+		if (isUndo) {
+			tmpNode.innerHTML = record.htmlBefore;
+		} else {
+			tmpNode.innerHTML = record.htmlAfter;
+		}
+
+		if (first < parent.children.length) {
+			first = parent.children[first];
+
+			while(tmpNode.firstElementChild) {
+				parent.insertBefore(tmpNode.firstElementChild, first);
+			}
+		} else {
+			while(tmpNode.firstElementChild) {
+				parent.appendChild(tmpNode.firstElementChild);
+			}
+		}
 	}
 }
 
