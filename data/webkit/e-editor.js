@@ -842,7 +842,7 @@ EvoEditor.restoreElement = function(parentElement, beforeElement, tagName, attri
 	return node;
 }
 
-EvoEditor.moveChildren = function(fromElement, toElement, beforeElement, prepareParent)
+EvoEditor.moveChildren = function(fromElement, toElement, beforeElement, prepareParent, selectionUpdater)
 {
 	if (!fromElement)
 		throw "EvoEditor.moveChildren: fromElement cannot be null";
@@ -871,16 +871,29 @@ EvoEditor.moveChildren = function(fromElement, toElement, beforeElement, prepare
 				firstElement = toParent;
 			}
 
-			var li = fromElement.firstChild;
+			var li = fromElement.firstChild, replacedBy = li.firstChild;
 
 			while (li.firstChild) {
 				toParent.append(li.firstChild);
 			}
 
+			if (selectionUpdater)
+				selectionUpdater.beforeRemove(fromElement.firstChild);
+
 			fromElement.removeChild(fromElement.firstChild);
+
+			if (selectionUpdater)
+				selectionUpdater.afterRemove(replacedBy);
 		} else {
 			if (!toElement && prepareParent) {
 				toElement = prepareParent.exec();
+
+				// trying to move other than LI into UL/OL, thus do not enclose it into LI
+				if (prepareParent.tagName == "LI" && (fromElement.tagName == "UL" || fromElement.tagName == "OL")) {
+					var toParent = toElement.parentElement;
+					toParent.removeChild(toElement);
+					toElement = toParent;
+				}
 			}
 
 			if (!firstElement) {
@@ -894,7 +907,7 @@ EvoEditor.moveChildren = function(fromElement, toElement, beforeElement, prepare
 	return firstElement;
 }
 
-EvoEditor.renameElement = function(element, tagName, attributes, targetElement)
+EvoEditor.renameElement = function(element, tagName, attributes, targetElement, selectionUpdater)
 {
 	var prepareParent = {
 		element : element,
@@ -903,15 +916,15 @@ EvoEditor.renameElement = function(element, tagName, attributes, targetElement)
 		targetElement : targetElement,
 
 		exec : function() {
-			if (targetElement)
-				return EvoEditor.restoreElement(prepareParent.targetElement, null, prepareParent.tagName, prepareParent.attributes);
+			if (this.targetElement)
+				return EvoEditor.restoreElement(this.targetElement, null, this.tagName, this.attributes);
 			else
-				return EvoEditor.restoreElement(prepareParent.element.parentElement, prepareParent.element, prepareParent.tagName, prepareParent.attributes);
+				return EvoEditor.restoreElement(this.element.parentElement, this.element, this.tagName, this.attributes);
 		}
 	};
 	var newElement;
 
-	newElement = EvoEditor.moveChildren(element, null, null, prepareParent);
+	newElement = EvoEditor.moveChildren(element, null, null, prepareParent, selectionUpdater);
 
 	element.parentElement.removeChild(element);
 
@@ -933,21 +946,48 @@ EvoEditor.SetBlockFormat = function(format)
 		exec : function(parent, element) {
 			var newElement;
 
-			if (traversar.selectionUpdater)
-				traversar.selectionUpdater.beforeRemove(element);
+			if (this.toSet.tagName != "LI" && (element.tagName == "UL" || element.tagName == "OL")) {
+				var affected = [];
 
-			if (traversar.firstLI) {
-				if (traversar.createParent) {
-					traversar.targetElement = EvoEditor.restoreElement(parent, element, traversar.createParent.tagName, traversar.createParent.attributes);
+				if (!EvoEditor.allChildrenInSelection(element, true, affected)) {
+					var elemParent = element.parentElement, insBefore, jj;
+
+					if (affected.length > 0 && !(affected[0] === element.firstElementChild)) {
+						insBefore = EvoEditor.splitList(element, 1, affected);
+					} else {
+						insBefore = element;
+					}
+
+					for (jj = 0; jj < affected.length; jj++) {
+						EvoEditor.insertListChildBefore(affected[jj], this.toSet.tagName, insBefore ? insBefore.parentElement : elemParent, insBefore);
+					}
+
+					if (!element.childElementCount) {
+						this.selectionUpdater.beforeRemove(element);
+
+						element.parentElement.removeChild(element);
+
+						this.selectionUpdater.afterRemove(insBefore ? insBefore.previousElementSibling : elemParent.lastElementChild);
+					}
+
+					return true;
 				}
-
-				traversar.firstLI = false;
 			}
 
-			newElement = EvoEditor.renameElement(element, traversar.toSet.tagName, traversar.toSet.attributes, traversar.targetElement);
+			if (this.firstLI) {
+				if (this.createParent) {
+					this.targetElement = EvoEditor.restoreElement(parent, element, this.createParent.tagName, this.createParent.attributes);
+				}
 
-			if (traversar.selectionUpdater)
-				traversar.selectionUpdater.afterRemove(newElement);
+				this.firstLI = false;
+			}
+
+			newElement = EvoEditor.renameElement(element, this.toSet.tagName, this.toSet.attributes, this.targetElement, this.selectionUpdater);
+
+			if (this.selectionUpdater) {
+				this.selectionUpdater.beforeRemove(element);
+				this.selectionUpdater.afterRemove(newElement);
+			}
 
 			return true;
 		}
@@ -1043,11 +1083,12 @@ EvoEditor.allChildrenInSelection = function(element, allowPartial, affected)
 
 EvoEditor.splitList = function(element, nParents, onlyAffected)
 {
-	var parent, from;
+	var parent, from = null;
 
 	if (onlyAffected && onlyAffected.length)
 		from = onlyAffected[onlyAffected.length - 1].nextElementSibling;
-	else
+
+	if (!from)
 		from = element.nextElementSibling;
 
 	if (nParents == -1) {
@@ -1089,10 +1130,10 @@ EvoEditor.splitList = function(element, nParents, onlyAffected)
 	return parent.nextElementSibling;
 }
 
-EvoEditor.insertListChildBefore = function(child, parent, insBefore)
+EvoEditor.insertListChildBefore = function(child, tagName, parent, insBefore)
 {
 	if (child.tagName == "LI") {
-		var node = document.createElement("DIV");
+		var node = document.createElement(tagName);
 
 		while(child.firstChild)
 			node.appendChild(child.firstChild);
@@ -1268,7 +1309,7 @@ EvoEditor.Indent = function(increment)
 						if (isNested) {
 							var clone;
 
-							insBefore = EvoEditor.splitList(element, 2, affected);
+							insBefore = EvoEditor.splitList(element, 1, affected);
 
 							clone = element.cloneNode(false);
 							elemParent.insertBefore(clone, insBefore);
@@ -1284,7 +1325,7 @@ EvoEditor.Indent = function(increment)
 							}
 
 							for (jj = 0; jj < affected.length; jj++) {
-								EvoEditor.insertListChildBefore(affected[jj], insBefore ? insBefore.parentElement : elemParent, insBefore);
+								EvoEditor.insertListChildBefore(affected[jj], "DIV", insBefore ? insBefore.parentElement : elemParent, insBefore);
 							}
 						}
 
@@ -1325,7 +1366,7 @@ EvoEditor.Indent = function(increment)
 					currValue = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
 				} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
 					currValue = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
-				} else if (currValue > 0) {
+				} else {
 					currValue = "";
 				}
 
@@ -1356,7 +1397,6 @@ EvoEditor.Indent = function(increment)
 		EvoEditor.ForeachChildInAffectedContent(affected, traversar);
 
 		if (traversar.record) {
-			traversar.record.applyIncrement = increment;
 			traversar.record.apply = EvoEditor.applyIndent;
 		}
 
