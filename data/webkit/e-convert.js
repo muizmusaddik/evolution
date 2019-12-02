@@ -177,7 +177,7 @@ EvoConvert.replaceList = function(element, tagName)
 					level++;
 			}
 
-			switch (level % 2) {
+			switch (level % 3) {
 			default:
 			case 0:
 				prefixSuffix = " * ";
@@ -631,16 +631,8 @@ EvoConvert.processNode = function(node, normalDivWidth)
 		} else {
 			str = node.innerText;
 
-			if (style && style.display == "block") {
+			if (str != "\n" && style && style.display == "block") {
 				str += "\n";
-
-				if (node.tagName == "H1" ||
-				    node.tagName == "H2" ||
-				    node.tagName == "H3" ||
-				    node.tagName == "H4" ||
-				    node.tagName == "H5" ||
-				    node.tagName == "H6")
-					str += "\n";
 			}
 		}
 	}

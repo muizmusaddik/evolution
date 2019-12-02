@@ -265,6 +265,26 @@ test_utils_html_editor_created_cb (GObject *source_object,
 	gtk_widget_show (GTK_WIDGET (fixture->editor));
 	gtk_container_add (GTK_CONTAINER (fixture->window), GTK_WIDGET (fixture->editor));
 
+	fixture->focus_tracker = e_focus_tracker_new (GTK_WINDOW (fixture->window));
+
+	e_focus_tracker_set_cut_clipboard_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "cut"));
+
+	e_focus_tracker_set_copy_clipboard_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "copy"));
+
+	e_focus_tracker_set_paste_clipboard_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "paste"));
+
+	e_focus_tracker_set_select_all_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "select-all"));
+
+	e_focus_tracker_set_undo_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "undo"));
+
+	e_focus_tracker_set_redo_action (fixture->focus_tracker,
+		e_html_editor_get_action (fixture->editor, "redo"));
+
 	/* Make sure this is off */
 	test_utils_fixture_change_setting_boolean (fixture,
 		"org.gnome.evolution.mail", "prompt-on-composer-mode-switch", FALSE);
@@ -355,6 +375,8 @@ void
 test_utils_fixture_tear_down (TestFixture *fixture,
 			      gconstpointer user_data)
 {
+	g_clear_object (&fixture->focus_tracker);
+
 	gtk_widget_destroy (GTK_WIDGET (fixture->window));
 	fixture->editor = NULL;
 

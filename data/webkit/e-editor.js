@@ -959,7 +959,7 @@ EvoEditor.SetBlockFormat = function(format)
 					}
 
 					for (jj = 0; jj < affected.length; jj++) {
-						EvoEditor.insertListChildBefore(affected[jj], this.toSet.tagName, insBefore ? insBefore.parentElement : elemParent, insBefore);
+						EvoEditor.insertListChildBefore(affected[jj], this.toSet.tagName, insBefore ? insBefore.parentElement : elemParent, insBefore, this.selectionUpdater);
 					}
 
 					if (!element.childElementCount) {
@@ -1130,7 +1130,7 @@ EvoEditor.splitList = function(element, nParents, onlyAffected)
 	return parent.nextElementSibling;
 }
 
-EvoEditor.insertListChildBefore = function(child, tagName, parent, insBefore)
+EvoEditor.insertListChildBefore = function(child, tagName, parent, insBefore, selectionUpdater)
 {
 	if (child.tagName == "LI") {
 		var node = document.createElement(tagName);
@@ -1139,7 +1139,14 @@ EvoEditor.insertListChildBefore = function(child, tagName, parent, insBefore)
 			node.appendChild(child.firstChild);
 
 		parent.insertBefore(node, insBefore);
+
+		if (selectionUpdater)
+			selectionUpdater.beforeRemove(child);
+
 		child.parentElement.removeChild(child);
+
+		if (selectionUpdater)
+			selectionUpdater.afterRemove(node);
 	} else {
 		parent.insertBefore(child, insBefore);
 	}
@@ -1325,7 +1332,7 @@ EvoEditor.Indent = function(increment)
 							}
 
 							for (jj = 0; jj < affected.length; jj++) {
-								EvoEditor.insertListChildBefore(affected[jj], "DIV", insBefore ? insBefore.parentElement : elemParent, insBefore);
+								EvoEditor.insertListChildBefore(affected[jj], "DIV", insBefore ? insBefore.parentElement : elemParent, insBefore, this.selectionUpdater);
 							}
 						}
 
@@ -1981,8 +1988,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 			}
 		}
 
-		if (EvoEditor.mode == EvoEditor.MODE_HTML &&
-		    (flags & EvoEditor.E_CONTENT_EDITOR_GET_TO_SEND_HTML) != 0)
+		if ((flags & EvoEditor.E_CONTENT_EDITOR_GET_TO_SEND_HTML) != 0)
 			content_data["to-send-html"] = EvoEditor.convertHtmlToSend();
 
 		if ((flags & EvoEditor.	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN) != 0) {

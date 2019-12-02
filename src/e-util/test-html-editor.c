@@ -527,6 +527,7 @@ create_new_editor_cb (GObject *source_object,
 	GtkWidget *widget;
 	EHTMLEditor *editor;
 	EContentEditor *cnt_editor;
+	EFocusTracker *focus_tracker;
 	GError *error = NULL;
 
 	widget = e_html_editor_new_finish (result, &error);
@@ -565,6 +566,27 @@ create_new_editor_cb (GObject *source_object,
 	widget = gtk_window_new (GTK_WINDOW_TOPLEVEL);
 	gtk_widget_set_size_request (widget, 600, 400);
 	gtk_widget_show (widget);
+
+	focus_tracker = e_focus_tracker_new (GTK_WINDOW (widget));
+	g_object_set_data_full (G_OBJECT (widget), "e-focus-tracker", focus_tracker, g_object_unref);
+
+	e_focus_tracker_set_cut_clipboard_action (focus_tracker,
+		e_html_editor_get_action (editor, "cut"));
+
+	e_focus_tracker_set_copy_clipboard_action (focus_tracker,
+		e_html_editor_get_action (editor, "copy"));
+
+	e_focus_tracker_set_paste_clipboard_action (focus_tracker,
+		e_html_editor_get_action (editor, "paste"));
+
+	e_focus_tracker_set_select_all_action (focus_tracker,
+		e_html_editor_get_action (editor, "select-all"));
+
+	e_focus_tracker_set_undo_action (focus_tracker,
+		e_html_editor_get_action (editor, "undo"));
+
+	e_focus_tracker_set_redo_action (focus_tracker,
+		e_html_editor_get_action (editor, "redo"));
 
 	g_signal_connect_swapped (
 		widget, "destroy",

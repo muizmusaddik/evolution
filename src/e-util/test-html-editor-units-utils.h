@@ -31,6 +31,7 @@ typedef struct _TestSettings {
 typedef struct _TestFixture {
 	GtkWidget *window;
 	EHTMLEditor *editor;
+	EFocusTracker *focus_tracker;
 	GSList *settings; /* TestSettings * */
 	guint key_state;
 

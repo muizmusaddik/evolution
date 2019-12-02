@@ -590,7 +590,7 @@ test_list_alpha_html (TestFixture *fixture)
 			"<div>text</div>"
 		HTML_SUFFIX,
 		"   A. item 1\n"
-		"      A. item 2\n"
+		"         A. item 2\n"
 		"   B. item 3\n"
 		"text\n"))
 		g_test_fail ();
@@ -611,7 +611,7 @@ test_list_alpha_plain (TestFixture *fixture)
 		"type:text\n",
 		NULL,
 		"   A. item 1\n"
-		"      A. item 2\n"
+		"         A. item 2\n"
 		"   B. item 3\n"
 		"text\n"))
 		g_test_fail ();
@@ -815,7 +815,7 @@ test_list_multi_change_plain (TestFixture *fixture)
 		"   2. item 2\n"
 		"   3. item 3\n"
 		"   4. item 4\n"
-		"   5. "))
+		"   5. \n"))
 		g_test_fail ();
 }
 
@@ -1064,7 +1064,7 @@ test_paragraph_normal_selection (TestFixture *fixture)
 		"<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1075,7 +1075,7 @@ test_paragraph_normal_selection (TestFixture *fixture)
 		"<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1086,7 +1086,7 @@ test_paragraph_normal_selection (TestFixture *fixture)
 		"<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1105,7 +1105,7 @@ test_paragraph_normal_typed (TestFixture *fixture)
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1117,7 +1117,7 @@ test_paragraph_normal_typed (TestFixture *fixture)
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1129,7 +1129,7 @@ test_paragraph_normal_typed (TestFixture *fixture)
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
 		"odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1149,7 +1149,7 @@ test_paragraph_preformatted_selection (TestFixture *fixture)
 		"<div>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</div>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1160,7 +1160,7 @@ test_paragraph_preformatted_selection (TestFixture *fixture)
 		"<div style=\"width: 71ch;\">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</div>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1171,7 +1171,7 @@ test_paragraph_preformatted_selection (TestFixture *fixture)
 		"<div>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</div>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n"
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
-		"odio. Praesent libero.")) {
+		"odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1188,7 +1188,7 @@ test_paragraph_preformatted_typed (TestFixture *fixture)
 		HTML_PREFIX "<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero."
 		" Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. "
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1198,7 +1198,7 @@ test_paragraph_preformatted_typed (TestFixture *fixture)
 		HTML_PREFIX "<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero."
 		" Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. "
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1208,7 +1208,7 @@ test_paragraph_preformatted_typed (TestFixture *fixture)
 		HTML_PREFIX "<pre>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero."
 		" Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.</pre>" HTML_SUFFIX,
 		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. "
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.")) {
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n")) {
 		g_test_fail ();
 		return;
 	}
@@ -1239,7 +1239,7 @@ test_paragraph_address_selection (TestFixture *fixture)
 		"address line 2\n"
 		"address line 3\n"
 		"\n"
-		"normal text"))
+		"normal text\n"))
 		g_test_fail ();
 }
 
@@ -1268,7 +1268,7 @@ test_paragraph_address_typed (TestFixture *fixture)
 		"address line 2\n"
 		"address line 3\n"
 		"\n"
-		"normal text"))
+		"normal text\n"))
 		g_test_fail ();
 }
 
@@ -1298,7 +1298,7 @@ test_paragraph_header_n_selection (TestFixture *fixture,
 	expected_plain = g_strdup_printf (
 		"normal text\n"
 		"header %d\n"
-		"normal text",
+		"normal text\n",
 		header_n);
 
 	success = test_utils_run_simple_test (fixture, actions, expected_html, expected_plain);
@@ -1321,7 +1321,7 @@ test_paragraph_header_n_selection (TestFixture *fixture,
 		"normal text\n"
 		"\n"
 		"header %d\n"
-		"normal text",
+		"normal text\n",
 		header_n);
 
 	success = test_utils_run_simple_test (fixture,
@@ -1361,7 +1361,7 @@ test_paragraph_header_n_typed (TestFixture *fixture,
 	expected_plain = g_strdup_printf (
 		"normal text\n"
 		"header %d\n"
-		"normal text",
+		"normal text\n",
 		header_n);
 
 	success = test_utils_run_simple_test (fixture, actions, expected_html, expected_plain);
@@ -1384,7 +1384,7 @@ test_paragraph_header_n_typed (TestFixture *fixture,
 		"normal text\n"
 		"header %d\n"
 		"\n"
-		"normal text",
+		"normal text\n",
 		header_n);
 
 	success = test_utils_run_simple_test (fixture,
