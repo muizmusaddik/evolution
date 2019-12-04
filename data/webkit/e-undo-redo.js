@@ -452,14 +452,17 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 
 EvoUndoRedo.input_cb = function(inputEvent)
 {
+	var isWordDelim = EvoUndoRedo.isWordDelimEvent(inputEvent);
+
 	if (EvoUndoRedo.disabled) {
 		EvoEditor.EmitContentChanged();
+		EvoEditor.MaybeReplaceTextAfterInput(inputEvent, isWordDelim);
 		return;
 	}
 
 	var opType = inputEvent.inputType;
 
-	if (EvoUndoRedo.isWordDelimEvent(inputEvent))
+	if (isWordDelim)
 		opType += "::WordDelim";
 
 	if (EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType)) {
@@ -477,6 +480,8 @@ EvoUndoRedo.input_cb = function(inputEvent)
 
 	if (opType == "insertFromDrop")
 		EvoUndoRedo.dropTarget = null;
+
+	EvoEditor.MaybeReplaceTextAfterInput(inputEvent, isWordDelim);
 }
 
 EvoUndoRedo.drop_cb = function(event)

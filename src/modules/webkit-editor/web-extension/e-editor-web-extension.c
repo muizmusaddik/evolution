@@ -164,6 +164,48 @@ load_javascript_file (JSCContext *jsc_context,
 	g_free (content);
 }
 
+/* Returns 'null', when no match for the 'pattern' in 'text' found, otherwise
+   returns an 'object { start : nnn, end : nnn };' with the first longest pattern match. */
+static JSCValue *
+evo_editor_jsc_find_pattern (const gchar *text,
+			     const gchar *pattern,
+			     JSCContext *jsc_context)
+{
+	JSCValue *object = NULL;
+	GRegex *regex;
+
+	if (!text || !*text || !pattern || !*pattern)
+		return jsc_value_new_null (jsc_context);
+
+	regex = g_regex_new (pattern, 0, 0, NULL);
+	if (regex) {
+		GMatchInfo *match_info = NULL;
+		gint start = -1, end = -1;
+
+		if (g_regex_match_all (regex, text, G_REGEX_MATCH_NOTEMPTY, &match_info) &&
+		    g_match_info_fetch_pos (match_info, 0, &start, &end) &&
+		    start >= 0 && end >= 0) {
+			JSCValue *number;
+
+			object = jsc_value_new_object (jsc_context, NULL, NULL);
+
+			number = jsc_value_new_number (jsc_context, start);
+			jsc_value_object_set_property (object, "start", number);
+			g_clear_object (&number);
+
+			number = jsc_value_new_number (jsc_context, end);
+			jsc_value_object_set_property (object, "end", number);
+			g_clear_object (&number);
+		}
+
+		if (match_info)
+			g_match_info_free (match_info);
+		g_regex_unref (regex);
+	}
+
+	return object ? object : jsc_value_new_null (jsc_context);
+}
+
 static void
 window_object_cleared_cb (WebKitScriptWorld *world,
 			  WebKitWebPage *page,
@@ -171,6 +213,7 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 			  gpointer user_data)
 {
 	JSCContext *jsc_context;
+	JSCValue *jsc_editor;
 
 	/* Load the javascript files only to the main frame, not to the subframes */
 	if (!webkit_frame_is_main_frame (frame))
@@ -183,6 +226,21 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 	load_javascript_file (jsc_context, "e-selection.js");
 	load_javascript_file (jsc_context, "e-undo-redo.js");
 	load_javascript_file (jsc_context, "e-editor.js");
+
+	jsc_editor = jsc_context_get_value (jsc_context, "EvoEditor");
+
+	if (jsc_editor) {
+		JSCValue *jsc_function;
+
+		jsc_function = jsc_value_new_function (jsc_context, "findPattern",
+			G_CALLBACK (evo_editor_jsc_find_pattern), g_object_ref (jsc_context), g_object_unref,
+			JSC_TYPE_VALUE, 2, G_TYPE_STRING, G_TYPE_STRING);
+
+		jsc_value_object_set_property (jsc_editor, "findPattern", jsc_function);
+
+		g_clear_object (&jsc_function);
+		g_clear_object (&jsc_editor);
+	}
 
 	g_clear_object (&jsc_context);
 }

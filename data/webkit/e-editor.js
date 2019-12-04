@@ -21,6 +21,14 @@
    public functions start with upper-case letter. */
 
 var EvoEditor = {
+	// stephenhay from https://mathiasbynens.be/demo/url-regex
+	URL_PATTERN : "((?:(?:(?:" + "news|telnet|nntp|file|https?|s?ftp|webcal|localhost|ssh" + ")\\:\\/\\/)|(?:www\\.|ftp\\.))[^\\s\\/\\$\\.\\?#].[^\\s]*+)",
+	// from camel-url-scanner.c
+	URL_INVALID_TRAILING_CHARS : ",.:;?!-|}])\">",
+	// http://www.w3.org/TR/html5/forms.html#valid-e-mail-address
+	EMAIL_PATTERN : "[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}" +
+			"[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*+",
+
 	E_CONTENT_EDITOR_ALIGNMENT_NONE : -1,
 	E_CONTENT_EDITOR_ALIGNMENT_LEFT : 0,
 	E_CONTENT_EDITOR_ALIGNMENT_CENTER : 1,
@@ -57,6 +65,9 @@ var EvoEditor = {
 
 	TEXT_INDENT_SIZE : 3, // in characters
 	NORMAL_PARAGRAPH_WIDTH : 71,
+	MAGIC_LINKS : true,
+	MAGIC_SMILEYS : false,
+	UNICODE_SMILEYS : false,
 
 	FORCE_NO : 0,
 	FORCE_YES : 1,
@@ -2064,6 +2075,107 @@ EvoEditor.UpdateStyleSheet = function(id, css)
 EvoEditor.UpdateThemeStyleSheet = function(css)
 {
 	return EvoEditor.UpdateStyleSheet("x-evo-theme-sheet", css);
+}
+
+EvoEditor.MaybeReplaceTextAfterInput = function(inputEvent, isWordDelim)
+{
+	var isInsertParagraph = inputEvent.inputType == "insertParagraph";
+
+	if ((!isInsertParagraph && inputEvent.inputType != "insertText") ||
+	    (!(EvoEditor.MAGIC_LINKS && (isWordDelim || isInsertParagraph)) &&
+	    !EvoEditor.MAGIC_SMILEYS)) {
+		return;
+	}
+
+	var selection = document.getSelection();
+
+	if (!selection.isCollapsed || !selection.baseNode)
+		return;
+
+	var baseNode = selection.baseNode, parentElem;
+
+	if (baseNode.nodeType != baseNode.ELEMENT_NODE) {
+		parentElem = baseNode.parentElement;
+
+		if (!parentElem)
+			return;
+	} else {
+		parentElem = baseNode;
+	}
+
+	if (isInsertParagraph) {
+		parentElem = parentElem.previousElementSibling;
+
+		if (!parentElem)
+			return;
+
+		baseNode = parentElem.lastChild;
+
+		if (!baseNode || baseNode.nodeType != baseNode.TEXT_NODE)
+			return;
+	}
+
+	if (baseNode.nodeValue == "")
+		return;
+
+	var canLinks;
+
+	canLinks = EvoEditor.MAGIC_LINKS && (isWordDelim || isInsertParagraph);
+
+	if (canLinks) {
+		var tmpNode;
+
+		for (tmpNode = baseNode; tmpNode && tmpNode.tagName != "BODY"; tmpNode = tmpNode.parentElement) {
+			if (tmpNode.tagName == "A") {
+				canLinks = false;
+				break;
+			}
+		}
+	}
+
+	var text = baseNode.nodeValue, selectionUpdater, covered = false;
+
+	selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	if (canLinks) {
+		var isEmail = text.search("@") >= 0, match;
+
+		// the replace call below replaces &nbsp; (0xA0) with regular space
+		match = EvoEditor.findPattern(text.replace(/ /g, " "), isEmail ? EvoEditor.EMAIL_PATTERN : EvoEditor.URL_PATTERN);
+		if (match) {
+			var url = text.substring(match.start, match.end), node;
+
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink", baseNode.parentElement, baseNode.parentElement,
+				EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+			try {
+				covered = true;
+
+				baseNode.splitText(match.end);
+				baseNode.splitText(match.start);
+
+				baseNode = baseNode.nextSibling;
+
+				if (isEmail)
+					url = "mailto:" + url;
+				else if (url.startsWith("www."))
+					url = "http://" + url;
+
+				node = document.createElement("A");
+				node.href = url;
+
+				baseNode.parentElement.insertBefore(node, baseNode);
+				node.appendChild(baseNode);
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
+			}
+		}
+	}
+
+	if (!covered && EvoEditor.MAGIC_SMILEYS) {
+	}
+
+	selectionUpdater.restore();
 }
 
 document.onload = EvoEditor.initializeContent;

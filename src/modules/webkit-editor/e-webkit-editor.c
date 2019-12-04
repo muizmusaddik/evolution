@@ -65,7 +65,10 @@ enum {
 	PROP_SUPERSCRIPT,
 	PROP_UNDERLINE,
 
-	PROP_NORMAL_PARAGRAPH_WIDTH
+	PROP_NORMAL_PARAGRAPH_WIDTH,
+	PROP_MAGIC_LINKS,
+	PROP_MAGIC_SMILEYS,
+	PROP_UNICODE_SMILEYS
 };
 
 struct _EWebKitEditorPrivate {
@@ -112,6 +115,9 @@ struct _EWebKitEditorPrivate {
 
 	guint font_size;
 	gint normal_paragraph_width;
+	gboolean magic_links;
+	gboolean magic_smileys;
+	gboolean unicode_smileys;
 
 	EContentEditorBlockFormat block_format;
 	EContentEditorAlignment alignment;
@@ -5146,6 +5152,81 @@ webkit_editor_get_normal_paragraph_width (EWebKitEditor *wk_editor)
 }
 
 static void
+webkit_editor_set_magic_links (EWebKitEditor *wk_editor,
+			       gboolean value)
+{
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+
+	if ((wk_editor->priv->magic_links ? 1 : 0) != (value ? 1 : 0)) {
+		wk_editor->priv->magic_links = value;
+
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.MAGIC_LINKS = %x;",
+			value);
+
+		g_object_notify (G_OBJECT (wk_editor), "magic-links");
+	}
+}
+
+static gboolean
+webkit_editor_get_magic_links (EWebKitEditor *wk_editor)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
+
+	return wk_editor->priv->magic_links;
+}
+
+static void
+webkit_editor_set_magic_smileys (EWebKitEditor *wk_editor,
+				 gboolean value)
+{
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+
+	if ((wk_editor->priv->magic_smileys ? 1 : 0) != (value ? 1 : 0)) {
+		wk_editor->priv->magic_smileys = value;
+
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.MAGIC_SMILEYS = %x;",
+			value);
+
+		g_object_notify (G_OBJECT (wk_editor), "magic-smileys");
+	}
+}
+
+static gboolean
+webkit_editor_get_magic_smileys (EWebKitEditor *wk_editor)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
+
+	return wk_editor->priv->magic_smileys;
+}
+
+static void
+webkit_editor_set_unicode_smileys (EWebKitEditor *wk_editor,
+				   gboolean value)
+{
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+
+	if ((wk_editor->priv->unicode_smileys ? 1 : 0) != (value ? 1 : 0)) {
+		wk_editor->priv->unicode_smileys = value;
+
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.UNICODE_SMILEYS = %x;",
+			value);
+
+		g_object_notify (G_OBJECT (wk_editor), "unicide-smileys");
+	}
+}
+
+static gboolean
+webkit_editor_get_unicode_smileys (EWebKitEditor *wk_editor)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
+
+	return wk_editor->priv->unicode_smileys;
+}
+
+static void
 e_webkit_editor_initialize_web_extensions_cb (WebKitWebContext *web_context,
 					      gpointer user_data)
 {
@@ -5214,10 +5295,27 @@ webkit_editor_constructed (GObject *object)
 	webkit_settings_set_enable_developer_extras (web_settings, e_util_get_webkit_developer_mode_enabled ());
 
 	settings = e_util_ref_settings ("org.gnome.evolution.mail");
+
 	g_settings_bind (
 		settings, "composer-word-wrap-length",
 		wk_editor, "normal-paragraph-width",
 		G_SETTINGS_BIND_GET);
+
+	g_settings_bind (
+		settings, "composer-magic-links",
+		wk_editor, "magic-links",
+		G_SETTINGS_BIND_GET);
+
+	g_settings_bind (
+		settings, "composer-magic-smileys",
+		wk_editor, "magic-smileys",
+		G_SETTINGS_BIND_GET);
+
+	g_settings_bind (
+		settings, "composer-unicode-smileys",
+		wk_editor, "unicode-smileys",
+		G_SETTINGS_BIND_GET);
+
 	g_object_unref (settings);
 
 	e_webkit_editor_load_data (wk_editor, "");
@@ -5406,6 +5504,24 @@ webkit_editor_set_property (GObject *object,
 				g_value_get_int (value));
 			return;
 
+		case PROP_MAGIC_LINKS:
+			webkit_editor_set_magic_links (
+				E_WEBKIT_EDITOR (object),
+				g_value_get_boolean (value));
+			return;
+
+		case PROP_MAGIC_SMILEYS:
+			webkit_editor_set_magic_smileys (
+				E_WEBKIT_EDITOR (object),
+				g_value_get_boolean (value));
+			return;
+
+		case PROP_UNICODE_SMILEYS:
+			webkit_editor_set_unicode_smileys (
+				E_WEBKIT_EDITOR (object),
+				g_value_get_boolean (value));
+			return;
+
 		case PROP_ALIGNMENT:
 			webkit_editor_set_alignment (
 				E_WEBKIT_EDITOR (object),
@@ -5582,6 +5698,21 @@ webkit_editor_get_property (GObject *object,
 		case PROP_NORMAL_PARAGRAPH_WIDTH:
 			g_value_set_int (value,
 				webkit_editor_get_normal_paragraph_width (E_WEBKIT_EDITOR (object)));
+			return;
+
+		case PROP_MAGIC_LINKS:
+			g_value_set_boolean (value,
+				webkit_editor_get_magic_links (E_WEBKIT_EDITOR (object)));
+			return;
+
+		case PROP_MAGIC_SMILEYS:
+			g_value_set_boolean (value,
+				webkit_editor_get_magic_smileys (E_WEBKIT_EDITOR (object)));
+			return;
+
+		case PROP_UNICODE_SMILEYS:
+			g_value_set_boolean (value,
+				webkit_editor_get_unicode_smileys (E_WEBKIT_EDITOR (object)));
 			return;
 
 		case PROP_ALIGNMENT:
@@ -6452,7 +6583,43 @@ e_webkit_editor_class_init (EWebKitEditorClass *class)
 			NULL,
 			G_MININT32,
 			G_MAXINT32,
-			71, /* Should be the same as e-editor.js:EvoEditor.NORMAL_PARAGRAPH_WIDTH */
+			71, /* Should be the same as e-editor.js:EvoEditor.NORMAL_PARAGRAPH_WIDTH and in the init()*/
+			G_PARAM_READWRITE |
+			G_PARAM_CONSTRUCT |
+			G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (
+		object_class,
+		PROP_MAGIC_LINKS,
+		g_param_spec_boolean (
+			"magic-links",
+			NULL,
+			NULL,
+			TRUE, /* Should be the same as e-editor.js:EvoEditor.MAGIC_LINKS and in the init() */
+			G_PARAM_READWRITE |
+			G_PARAM_CONSTRUCT |
+			G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (
+		object_class,
+		PROP_MAGIC_SMILEYS,
+		g_param_spec_boolean (
+			"magic-smileys",
+			NULL,
+			NULL,
+			FALSE, /* Should be the same as e-editor.js:EvoEditor.MAGIC_SMILEYS and in the init() */
+			G_PARAM_READWRITE |
+			G_PARAM_CONSTRUCT |
+			G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (
+		object_class,
+		PROP_UNICODE_SMILEYS,
+		g_param_spec_boolean (
+			"unicode-smileys",
+			NULL,
+			NULL,
+			FALSE, /* Should be the same as e-editor.js:EvoEditor.UNICODE_SMILEYS and in the init() */
 			G_PARAM_READWRITE |
 			G_PARAM_CONSTRUCT |
 			G_PARAM_STATIC_STRINGS));
@@ -6473,6 +6640,11 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 	wk_editor->priv->spell_checker = e_spell_checker_new ();
 	wk_editor->priv->old_settings = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify) g_variant_unref);
 	wk_editor->priv->visually_wrap_long_lines = FALSE;
+
+	wk_editor->priv->normal_paragraph_width = 71;
+	wk_editor->priv->magic_links = TRUE;
+	wk_editor->priv->magic_smileys = FALSE;
+	wk_editor->priv->unicode_smileys = FALSE;
 
 	g_signal_connect (
 		wk_editor, "load-changed",
@@ -6578,7 +6750,6 @@ e_webkit_editor_init (EWebKitEditor *wk_editor)
 
 	wk_editor->priv->start_bottom = E_THREE_STATE_INCONSISTENT;
 	wk_editor->priv->top_signature = E_THREE_STATE_INCONSISTENT;
-	wk_editor->priv->normal_paragraph_width = 71; /* Should be the same as e-editor.js:EvoEditor.NORMAL_PARAGRAPH_WIDTH */
 }
 
 static void

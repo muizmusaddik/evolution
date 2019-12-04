@@ -382,11 +382,11 @@ EvoSelection.CreateUpdaterObject = function()
 
 	obj.selectionBefore = EvoSelection.Store(document);
 	obj.selectionBaseNode = document.getSelection().baseNode;
-	obj.selectionBaseOffset = document.getSelection().baseOffset;
+	obj.selectionBaseOffset = document.getSelection().baseOffset + EvoSelection.GetOverallTextOffset(obj.selectionBaseNode);
 
 	if (!document.getSelection().isCollapsed) {
 		obj.selectionExtentNode = document.getSelection().extentNode;
-		obj.selectionExtentOffset = document.getSelection().extentOffset;
+		obj.selectionExtentOffset = document.getSelection().extentOffset + EvoSelection.GetOverallTextOffset(obj.selectionExtentNode);
 	}
 
 	return obj;
