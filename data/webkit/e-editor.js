@@ -173,6 +173,9 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	}
 
 	value = computedStyle ? computedStyle.fontFamily : "";
+	// dequote the font name, if needed
+	if (value.length > 1 && value.charAt(0) == '\"' && value.charAt(value.length - 1) == '\"')
+		value = value.substr(1, value.length - 2);
 	if (force || value != EvoEditor.formattingState.fontFamily) {
 		EvoEditor.formattingState.fontFamily = value;
 		changes["fontFamily"] = (window.getComputedStyle(document.body).fontFamily == value) ? "" : value;
@@ -1103,6 +1106,13 @@ EvoEditor.splitList = function(element, nParents, onlyAffected)
 
 	parent = from ? from.parentElement : element.parentElement;
 
+	if (!from && parent) {
+		from = parent.nextElementSibling;
+		nextFrom = from;
+		nParents--;
+		parent = parent.parentElement;
+	}
+
 	while (nParents > 0 && parent && parent.tagName != "HTML") {
 		nParents--;
 		nextFrom = null;
@@ -1319,16 +1329,21 @@ EvoEditor.Indent = function(increment)
 							insBefore = EvoEditor.splitList(element, 1, affected);
 
 							clone = element.cloneNode(false);
-							elemParent.insertBefore(clone, insBefore);
+							if (insBefore)
+								insBefore.parentElement.insertBefore(clone, insBefore);
+							else
+								elemParent.insertBefore(clone, insBefore);
 
 							for (jj = 0; jj < affected.length; jj++) {
 								clone.appendChild(affected[jj]);
 							}
 						} else {
-							if (!all && affected.length > 0 && !(affected[0] === element.firstElementChild)) {
+							if (!all && affected.length > 0 && affected[affected.length - 1] === element.lastElementChild) {
+								insBefore = element.nextElementSibling;
+							} else if (!all && affected.length > 0 && !(affected[0] === element.firstElementChild)) {
 								insBefore = EvoEditor.splitList(element, 1, affected);
 							} else {
-								insBefore = element.nextElementSibling;
+								insBefore = element;
 							}
 
 							for (jj = 0; jj < affected.length; jj++) {
@@ -1336,12 +1351,16 @@ EvoEditor.Indent = function(increment)
 							}
 						}
 
-						if (!element.childElementCount) {
+						while (element && !(element === elemParent) && !element.childElementCount) {
+							tmpElement = element.parentElement;
+
 							this.selectionUpdater.beforeRemove(element);
 
 							element.parentElement.removeChild(element);
 
 							this.selectionUpdater.afterRemove(insBefore ? insBefore.previousElementSibling : elemParent.lastElementChild);
+
+							element = tmpElement;
 						}
 
 						if (change)

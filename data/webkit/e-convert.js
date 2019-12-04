@@ -210,6 +210,21 @@ EvoConvert.replaceList = function(element, tagName)
 				indent = EvoConvert.MIN_OL_WIDTH;
 		}
 
+		if (list.hasAttribute("x-evo-extra-indent")) {
+			var tmp = list.getAttribute("x-evo-extra-indent");
+
+			if (tmp) {
+				tmp = parseInt(tmp);
+
+				if (!Number.isInteger(tmp))
+					tmp = 0;
+			} else {
+				tmp = 0;
+			}
+
+			indent += tmp;
+		}
+
 		var liCount = 0;
 
 		for (ii = 0; ii < list.children.length; ii++) {
@@ -274,6 +289,21 @@ EvoConvert.replaceList = function(element, tagName)
 				}
 			} else {
 				node = child.cloneNode(true);
+
+				if (node.tagName == "UL" || node.tagName == "OL") {
+					var tmp = child.getAttribute("x-evo-extra-indent");
+
+					if (tmp) {
+						tmp = parseInt(tmp);
+
+						if (!Number.isInteger(tmp))
+							tmp = 0;
+					} else {
+						tmp = 0;
+					}
+
+					node.setAttribute("x-evo-extra-indent", indent + tmp);
+				}
 			}
 
 			list.parentNode.insertBefore(node, list);
@@ -631,7 +661,7 @@ EvoConvert.processNode = function(node, normalDivWidth)
 		} else {
 			str = node.innerText;
 
-			if (str != "\n" && style && style.display == "block") {
+			if (str != "\n" && ((style && style.display == "block") || node.tagName == "ADDRESS")) {
 				str += "\n";
 			}
 		}
