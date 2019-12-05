@@ -2077,7 +2077,7 @@ EvoEditor.UpdateThemeStyleSheet = function(css)
 	return EvoEditor.UpdateStyleSheet("x-evo-theme-sheet", css);
 }
 
-EvoEditor.MaybeReplaceTextAfterInput = function(inputEvent, isWordDelim)
+EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 {
 	var isInsertParagraph = inputEvent.inputType == "insertParagraph";
 
@@ -2133,9 +2133,7 @@ EvoEditor.MaybeReplaceTextAfterInput = function(inputEvent, isWordDelim)
 		}
 	}
 
-	var text = baseNode.nodeValue, selectionUpdater, covered = false;
-
-	selectionUpdater = EvoSelection.CreateUpdaterObject();
+	var text = baseNode.nodeValue, covered = false;
 
 	if (canLinks) {
 		var isEmail = text.search("@") >= 0, match;
@@ -2143,39 +2141,92 @@ EvoEditor.MaybeReplaceTextAfterInput = function(inputEvent, isWordDelim)
 		// the replace call below replaces &nbsp; (0xA0) with regular space
 		match = EvoEditor.findPattern(text.replace(/ /g, " "), isEmail ? EvoEditor.EMAIL_PATTERN : EvoEditor.URL_PATTERN);
 		if (match) {
-			var url = text.substring(match.start, match.end), node;
+			var url = text.substring(match.start, match.end), node, selection;
 
-			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink", baseNode.parentElement, baseNode.parentElement,
-				EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+			// because 'search' uses Regex and throws exception on brackets and other Regex-sensitive characters
+			var isInvalidTrailingChar = function(chr) {
+				var jj;
 
-			try {
-				covered = true;
+				for (jj = 0; jj < EvoEditor.URL_INVALID_TRAILING_CHARS.length; jj++) {
+					if (chr == EvoEditor.URL_INVALID_TRAILING_CHARS.charAt(jj))
+						return true;
+				}
 
-				baseNode.splitText(match.end);
-				baseNode.splitText(match.start);
+				return false;
+			};
 
-				baseNode = baseNode.nextSibling;
+			/* URLs are extremely unlikely to end with any punctuation, so
+			 * strip any trailing punctuation off from link and put it after
+			 * the link. Do the same for any closing double-quotes as well. */
+			while (url.length > 0 && isInvalidTrailingChar(url.charAt(url.length - 1))) {
+				var open_bracket = 0, close_bracket = url.charAt(url.length - 1);
 
-				if (isEmail)
-					url = "mailto:" + url;
-				else if (url.startsWith("www."))
-					url = "http://" + url;
+				if (close_bracket == ')')
+					open_bracket = '(';
+				else if (close_bracket == '}')
+					open_bracket = '{';
+				else if (close_bracket == ']')
+					open_bracket = '[';
+				else if (close_bracket == '>')
+					open_bracket = '<';
 
-				node = document.createElement("A");
-				node.href = url;
+				if (open_bracket != 0) {
+					var n_opened = 0, n_closed = 0, ii, chr;
 
-				baseNode.parentElement.insertBefore(node, baseNode);
-				node.appendChild(baseNode);
-			} finally {
-				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
+					for (ii = 0; ii < url.length; ii++) {
+						chr = url.charAt(ii);
+
+						if (chr == open_bracket)
+							n_opened++;
+						else if (chr == close_bracket)
+							n_closed++;
+					}
+
+					/* The closing bracket can match one inside the URL,
+					   thus keep it there. */
+					if (n_opened > 0 && n_opened - n_closed >= 0)
+						break;
+				}
+
+				url = url.substr(0, url.length - 1);
+				match.end--;
+			}
+
+			if (url.length > 0) {
+				selection = EvoSelection.Store(document);
+
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink", baseNode.parentElement, baseNode.parentElement,
+					EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+				try {
+					covered = true;
+
+					baseNode.splitText(match.end);
+					baseNode.splitText(match.start);
+
+					baseNode = baseNode.nextSibling;
+
+					if (isEmail)
+						url = "mailto:" + url;
+					else if (url.startsWith("www."))
+						url = "http://" + url;
+
+					node = document.createElement("A");
+					node.href = url;
+
+					baseNode.parentElement.insertBefore(node, baseNode);
+					node.appendChild(baseNode);
+
+					EvoSelection.Restore(document, selection);
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
+				}
 			}
 		}
 	}
 
 	if (!covered && EvoEditor.MAGIC_SMILEYS) {
 	}
-
-	selectionUpdater.restore();
 }
 
 document.onload = EvoEditor.initializeContent;

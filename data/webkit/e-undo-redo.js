@@ -481,7 +481,7 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	if (opType == "insertFromDrop")
 		EvoUndoRedo.dropTarget = null;
 
-	EvoEditor.MaybeReplaceTextAfterInput(inputEvent, isWordDelim);
+	EvoEditor.AfterInputEvent(inputEvent, isWordDelim);
 }
 
 EvoUndoRedo.drop_cb = function(event)
@@ -622,6 +622,11 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	}
 
 	EvoUndoRedo.ongoingRecordings.length = EvoUndoRedo.ongoingRecordings.length - 1;
+
+	// ignore empty group records
+	if (kind == EvoUndoRedo.RECORD_KIND_GROUP && (!record.records || !record.records.length)) {
+		record.ignore = true;
+	}
 
 	if (record.ignore) {
 		if (!EvoUndoRedo.ongoingRecordings.length &&
