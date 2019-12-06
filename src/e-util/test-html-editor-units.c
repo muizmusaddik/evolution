@@ -3316,7 +3316,7 @@ test_link_insert_dialog (TestFixture *fixture)
 		"type:http://www.gnome.org\n"
 		"seq:n\n",
 		HTML_PREFIX "<div>a link example: <a href=\"http://www.gnome.org\">http://www.gnome.org</a></div>" HTML_SUFFIX,
-		"a link example: http://www.gnome.org"))
+		"a link example: http://www.gnome.org\n"))
 		g_test_fail ();
 }
 
@@ -3331,7 +3331,7 @@ test_link_insert_dialog_selection (TestFixture *fixture)
 		"type:http://www.gnome.org\n"
 		"seq:n\n",
 		HTML_PREFIX "<div>a link example: <a href=\"http://www.gnome.org\">GNOME</a></div>" HTML_SUFFIX,
-		"a link example: GNOME"))
+		"a link example: GNOME\n"))
 		g_test_fail ();
 }
 
@@ -3342,7 +3342,7 @@ test_link_insert_typed (TestFixture *fixture)
 		"mode:html\n"
 		"type:www.gnome.org \n",
 		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.org</a> </div>" HTML_SUFFIX,
-		"www.gnome.org "))
+		"www.gnome.org \n"))
 		g_test_fail ();
 }
 
@@ -3360,7 +3360,7 @@ test_link_insert_typed_change_description (TestFixture *fixture)
 		"type:GNOME\n"
 		"seq:n\n",
 		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">GNOME</a> </div>" HTML_SUFFIX,
-		"GNOME "))
+		"GNOME \n"))
 		g_test_fail ();
 }
 
@@ -3376,7 +3376,7 @@ test_link_insert_dialog_remove_link (TestFixture *fixture)
 		"type:R\n"
 		"seq:a\n",
 		HTML_PREFIX "<div>www.gnome.org </div>" HTML_SUFFIX,
-		"www.gnome.org "))
+		"www.gnome.org \n"))
 		g_test_fail ();
 }
 
@@ -3388,8 +3388,8 @@ test_link_insert_typed_append (TestFixture *fixture)
 		"type:www.gnome.org \n"
 		"seq:l\n"
 		"type:/about\n",
-		HTML_PREFIX "<div><a href=\"http://www.gnome.org/\">www.gnome.org/about</a> </div>" HTML_SUFFIX,
-		"www.gnome.org/about "))
+		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.org/about</a> </div>" HTML_SUFFIX,
+		"www.gnome.org/about \n"))
 		g_test_fail ();
 }
 
@@ -3401,7 +3401,7 @@ test_link_insert_typed_remove (TestFixture *fixture)
 		"type:www.gnome.org \n"
 		"seq:bbb\n",
 		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.o</a></div>" HTML_SUFFIX,
-		"www.gnome.o"))
+		"www.gnome.o\n"))
 		g_test_fail ();
 }
 

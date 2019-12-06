@@ -122,6 +122,10 @@ struct _EWebKitEditorPrivate {
 	EContentEditorBlockFormat block_format;
 	EContentEditorAlignment alignment;
 
+	/* For context menu */
+	gchar *context_menu_caret_word;
+	guint32 context_menu_node_flags; /* bit-or of EContentEditorNodeFlags */
+
 	gchar *current_user_stylesheet;
 
 	WebKitLoadEvent webkit_load_event;
@@ -193,6 +197,145 @@ G_DEFINE_TYPE_WITH_CODE (
 	G_IMPLEMENT_INTERFACE (
 		E_TYPE_CONTENT_EDITOR,
 		e_webkit_editor_content_editor_init));
+
+typedef struct _EWebKitEditorFlagClass {
+	GObjectClass parent_class;
+} EWebKitEditorFlagClass;
+
+typedef struct _EWebKitEditorFlag {
+	GObject parent;
+	gboolean is_set;
+} EWebKitEditorFlag;
+
+GType e_webkit_editor_flag_get_type (void);
+
+G_DEFINE_TYPE (EWebKitEditorFlag, e_webkit_editor_flag, G_TYPE_OBJECT)
+
+enum {
+	E_WEBKIT_EDITOR_FLAG_FLAGGED,
+	E_WEBKIT_EDITOR_FLAG_LAST_SIGNAL
+};
+
+static guint e_webkit_editor_flag_signals[E_WEBKIT_EDITOR_FLAG_LAST_SIGNAL];
+
+static void
+e_webkit_editor_flag_class_init (EWebKitEditorFlagClass *klass)
+{
+	e_webkit_editor_flag_signals[E_WEBKIT_EDITOR_FLAG_FLAGGED] = g_signal_new (
+		"flagged",
+		G_TYPE_FROM_CLASS (klass),
+		G_SIGNAL_RUN_LAST,
+		0,
+		NULL, NULL, NULL,
+		G_TYPE_NONE, 0,
+		G_TYPE_NONE);
+}
+
+static void
+e_webkit_editor_flag_init (EWebKitEditorFlag *flag)
+{
+	flag->is_set = FALSE;
+}
+
+static void
+e_webkit_editor_flag_set (EWebKitEditorFlag *flag)
+{
+	flag->is_set = TRUE;
+
+	g_signal_emit (flag, e_webkit_editor_flag_signals[E_WEBKIT_EDITOR_FLAG_FLAGGED], 0, NULL);
+}
+
+static JSCValue * /* transfer full */
+webkit_editor_call_jsc_sync (EWebKitEditor *wk_editor,
+			     const gchar *script_format,
+			     ...) G_GNUC_PRINTF (2, 3);
+
+typedef struct _JSCCallData {
+	EWebKitEditorFlag *flag;
+	gchar *script;
+	JSCValue *result;
+} JSCCallData;
+
+static void
+webkit_editor_jsc_call_done_cb (GObject *source,
+				GAsyncResult *result,
+				gpointer user_data)
+{
+	WebKitJavascriptResult *js_result;
+	JSCCallData *jcd = user_data;
+	GError *error = NULL;
+
+	js_result = webkit_web_view_run_javascript_finish (WEBKIT_WEB_VIEW (source), result, &error);
+
+	if (error) {
+		if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED) &&
+		    (!g_error_matches (error, WEBKIT_JAVASCRIPT_ERROR, WEBKIT_JAVASCRIPT_ERROR_SCRIPT_FAILED) ||
+		     /* WebKit can return empty error message, thus ignore those. */
+		     (error->message && *(error->message))))
+			g_warning ("Failed to call '%s' function: %s:%d: %s", jcd->script, g_quark_to_string (error->domain), error->code, error->message);
+		g_clear_error (&error);
+	}
+
+	if (js_result) {
+		JSCException *exception;
+		JSCValue *value;
+
+		value = webkit_javascript_result_get_js_value (js_result);
+		exception = jsc_context_get_exception (jsc_value_get_context (value));
+
+		if (exception) {
+			g_warning ("Failed to call '%s': %s", jcd->script, jsc_exception_get_message (exception));
+			jsc_context_clear_exception (jsc_value_get_context (value));
+		} else if (!jsc_value_is_null (value) && !jsc_value_is_undefined (value)) {
+			jcd->result = g_object_ref (value);
+		}
+
+		webkit_javascript_result_unref (js_result);
+	}
+
+	e_webkit_editor_flag_set (jcd->flag);
+}
+
+static JSCValue * /* transfer full */
+webkit_editor_call_jsc_sync (EWebKitEditor *wk_editor,
+			     const gchar *script_format,
+			     ...)
+{
+	JSCCallData jcd;
+	va_list va;
+
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), NULL);
+	g_return_val_if_fail (script_format != NULL, NULL);
+
+	va_start (va, script_format);
+	jcd.script = e_web_view_jsc_vprintf_script (script_format, va);
+	va_end (va);
+
+	jcd.flag = g_object_new (e_webkit_editor_flag_get_type (), NULL);
+	jcd.result = NULL;
+
+	webkit_web_view_run_javascript (WEBKIT_WEB_VIEW (wk_editor), jcd.script, wk_editor->priv->cancellable,
+		webkit_editor_jsc_call_done_cb, &jcd);
+
+	if (!jcd.flag->is_set) {
+		GMainLoop *loop;
+		gulong handler_id;
+
+		loop = g_main_loop_new (NULL, FALSE);
+
+		handler_id = g_signal_connect_swapped (jcd.flag, "flagged", G_CALLBACK (g_main_loop_quit), loop);
+
+		g_main_loop_run (loop);
+		g_main_loop_unref (loop);
+
+		g_signal_handler_disconnect (jcd.flag, handler_id);
+	}
+
+	g_clear_object (&jcd.flag);
+	g_free (jcd.script);
+
+	return jcd.result;
+}
 
 static gint16
 e_webkit_editor_three_state_to_int16 (EThreeState value)
@@ -377,6 +520,26 @@ content_changed_cb (WebKitUserContentManager *manager,
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
 
 	webkit_editor_set_changed (wk_editor, TRUE);
+}
+
+static void
+context_menu_requested_cb (WebKitUserContentManager *manager,
+			   WebKitJavascriptResult *js_result,
+			   gpointer user_data)
+{
+	EWebKitEditor *wk_editor = user_data;
+	JSCValue *jsc_params;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
+	g_return_if_fail (js_result != NULL);
+
+	jsc_params = webkit_javascript_result_get_js_value (js_result);
+	g_return_if_fail (jsc_value_is_object (jsc_params));
+
+	g_clear_pointer (&wk_editor->priv->context_menu_caret_word, g_free);
+
+	wk_editor->priv->context_menu_node_flags = e_web_view_jsc_get_object_property_int32 (jsc_params, "nodeFlags", 0);
+	wk_editor->priv->context_menu_caret_word = e_web_view_jsc_get_object_property_string (jsc_params, "caretWord", NULL);
 }
 
 static gboolean
@@ -2234,27 +2397,12 @@ static gchar *
 webkit_editor_get_caret_word (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
-	gchar *ret_val = NULL;
-	GVariant *result;
+
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), NULL);
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return NULL;
-	}
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMGetCaretWord",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
-
-	if (result) {
-		g_variant_get (result, "(s)", &ret_val);
-		g_variant_unref (result);
-	}
-
-	return ret_val;
+	return NULL;
 }
 
 static void
@@ -3621,34 +3769,28 @@ webkit_editor_image_get_height (EContentEditor *editor)
 static void
 webkit_editor_selection_unlink (EContentEditor *editor)
 {
-	EWebKitEditor *wk_editor;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "EEditorLinkDialogUnlink");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.Unlink();");
 }
 
 static void
 webkit_editor_on_link_dialog_open (EContentEditor *editor)
 {
-	EWebKitEditor *wk_editor;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "EEditorLinkDialogOnOpen");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.OnPropertiesOpen();");
 }
 
 static void
 webkit_editor_on_link_dialog_close (EContentEditor *editor)
 {
-	EWebKitEditor *wk_editor;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	webkit_editor_call_simple_extension_function (
-		wk_editor, "EEditorLinkDialogOnClose");
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.OnPropertiesClose();");
 }
 
 static void
@@ -3656,20 +3798,11 @@ webkit_editor_link_set_values (EContentEditor *editor,
                                const gchar *href,
                                const gchar *text)
 {
-	EWebKitEditor *wk_editor;
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
-
-	e_util_invoke_g_dbus_proxy_call_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"EEditorLinkDialogOk",
-		g_variant_new ("(tss)", current_page_id (wk_editor), href, text),
-		wk_editor->priv->cancellable);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.SetLinkValues(%s, %s);",
+		href, text);
 }
 
 static void
@@ -3678,24 +3811,17 @@ webkit_editor_link_get_values (EContentEditor *editor,
                                gchar **text)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
+	JSCValue *result;
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"EEditorLinkDialogShow",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
+	result = webkit_editor_call_jsc_sync (wk_editor, "EvoEditor.GetLinkValues();");
 
 	if (result) {
-		g_variant_get (result, "(ss)", href, text);
-		g_variant_unref (result);
+		*href = e_web_view_jsc_get_object_property_string (result, "href", NULL);
+		*text = e_web_view_jsc_get_object_property_string (result, "text", NULL);
+
+		g_clear_object (&result);
 	} else {
 		*href = NULL;
 		*text = NULL;
@@ -5265,12 +5391,15 @@ webkit_editor_constructed (GObject *object)
 
 	g_signal_connect_object (manager, "script-message-received::contentChanged",
 		G_CALLBACK (content_changed_cb), wk_editor, 0);
+	g_signal_connect_object (manager, "script-message-received::contextMenuRequested",
+		G_CALLBACK (context_menu_requested_cb), wk_editor, 0);
 	g_signal_connect_object (manager, "script-message-received::formattingChanged",
 		G_CALLBACK (formatting_changed_cb), wk_editor, 0);
 	g_signal_connect_object (manager, "script-message-received::undoRedoStateChanged",
 		G_CALLBACK (undu_redo_state_changed_cb), wk_editor, 0);
 
 	webkit_user_content_manager_register_script_message_handler (manager, "contentChanged");
+	webkit_user_content_manager_register_script_message_handler (manager, "contextMenuRequested");
 	webkit_user_content_manager_register_script_message_handler (manager, "formattingChanged");
 	webkit_user_content_manager_register_script_message_handler (manager, "undoRedoStateChanged");
 
@@ -5468,6 +5597,7 @@ webkit_editor_finalize (GObject *object)
 
 	g_free (priv->body_font_name);
 	g_free (priv->font_name);
+	g_free (priv->context_menu_caret_word);
 
 	/* Chain up to parent's finalize() method. */
 	G_OBJECT_CLASS (e_webkit_editor_parent_class)->finalize (object);
@@ -6168,18 +6298,17 @@ webkit_editor_context_menu_cb (EWebKitEditor *wk_editor,
                                GdkEvent *event,
                                WebKitHitTestResult *hit_test_result)
 {
-	GVariant *result;
-	EContentEditorNodeFlags flags = 0;
-	gboolean handled;
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
 
-	webkit_context_menu_remove_all (context_menu);
+	e_content_editor_emit_context_menu_requested (E_CONTENT_EDITOR (wk_editor),
+		wk_editor->priv->context_menu_node_flags,
+		wk_editor->priv->context_menu_caret_word,
+		event);
 
-	if ((result = webkit_context_menu_get_user_data (context_menu)))
-		flags = g_variant_get_int32 (result);
+	wk_editor->priv->context_menu_node_flags = E_CONTENT_EDITOR_NODE_UNKNOWN;
+	g_clear_pointer (&wk_editor->priv->context_menu_caret_word, g_free);
 
-	handled = e_content_editor_emit_context_menu_requested (E_CONTENT_EDITOR (wk_editor), flags, event);
-
-	return handled;
+	return TRUE;
 }
 
 static void

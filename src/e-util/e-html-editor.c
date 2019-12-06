@@ -240,7 +240,8 @@ action_context_spell_suggest_cb (GtkAction *action,
 }
 
 static void
-html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
+html_editor_inline_spelling_suggestions (EHTMLEditor *editor,
+					 const gchar *caret_word)
 {
 	EContentEditor *cnt_editor;
 	ESpellChecker *spell_checker;
@@ -248,7 +249,6 @@ html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
 	GtkUIManager *manager;
 	gchar **suggestions;
 	const gchar *path;
-	gchar *word;
 	guint count = 0;
 	guint length;
 	guint merge_id;
@@ -256,12 +256,11 @@ html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
 	gint ii;
 
 	cnt_editor = e_html_editor_get_content_editor (editor);
-	word = e_content_editor_get_caret_word (cnt_editor);
-	if (word == NULL || *word == '\0')
+	if (!caret_word || !*caret_word)
 		return;
 
 	spell_checker = e_content_editor_ref_spell_checker (cnt_editor);
-	suggestions = e_spell_checker_get_guesses_for_word (spell_checker, word);
+	suggestions = e_spell_checker_get_guesses_for_word (spell_checker, caret_word);
 
 	path = "/context-menu/context-spell-suggest/";
 	manager = e_html_editor_get_ui_manager (editor);
@@ -295,12 +294,9 @@ html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
 
 		/* Action name just needs to be unique. */
 		action_name = g_strdup_printf ("suggest-%d", count++);
+		action_label = g_markup_printf_escaped ("<b>%s</b>", suggestion);
 
-		action_label = g_markup_printf_escaped (
-			"<b>%s</b>", suggestion);
-
-		action = gtk_action_new (
-			action_name, action_label, NULL, NULL);
+		action = gtk_action_new (action_name, action_label, NULL, NULL);
 
 		g_object_set_data_full (
 			G_OBJECT (action), "word",
@@ -329,7 +325,6 @@ html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
 		g_free (action_label);
 	}
 
-	g_free (word);
 	g_strfreev (suggestions);
 	g_clear_object (&spell_checker);
 }
@@ -337,7 +332,8 @@ html_editor_inline_spelling_suggestions (EHTMLEditor *editor)
 /* Helper for html_editor_update_actions() */
 static void
 html_editor_spell_checkers_foreach (EHTMLEditor *editor,
-                                    const gchar *language_code)
+				    const gchar *language_code,
+				    const gchar *caret_word)
 {
 	EContentEditor *cnt_editor;
 	ESpellChecker *spell_checker;
@@ -346,22 +342,18 @@ html_editor_spell_checkers_foreach (EHTMLEditor *editor,
 	GtkUIManager *manager;
 	GList *list, *link;
 	gchar *path;
-	gchar *word;
 	gint ii = 0;
 	guint merge_id;
 
 	cnt_editor = e_html_editor_get_content_editor (editor);
-	word = e_content_editor_get_caret_word (cnt_editor);
-	if (word == NULL || *word == '\0')
+	if (!caret_word || !*caret_word)
 		return;
 
 	spell_checker = e_content_editor_ref_spell_checker (cnt_editor);
 
-	dictionary = e_spell_checker_ref_dictionary (
-		spell_checker, language_code);
+	dictionary = e_spell_checker_ref_dictionary (spell_checker, language_code);
 	if (dictionary != NULL) {
-		list = e_spell_dictionary_get_suggestions (
-			dictionary, word, -1);
+		list = e_spell_dictionary_get_suggestions (dictionary, caret_word, -1);
 		g_object_unref (dictionary);
 	} else {
 		list = NULL;
@@ -384,14 +376,10 @@ html_editor_spell_checkers_foreach (EHTMLEditor *editor,
 		GSList *proxies;
 
 		/* Action name just needs to be unique. */
-		action_name = g_strdup_printf (
-			"suggest-%s-%d", language_code, ii);
+		action_name = g_strdup_printf ("suggest-%s-%d", language_code, ii);
+		action_label = g_markup_printf_escaped ("%s", suggestion);
 
-		action_label = g_markup_printf_escaped (
-			"%s", suggestion);
-
-		action = gtk_action_new (
-			action_name, action_label, NULL, NULL);
+		action = gtk_action_new (action_name, action_label, NULL, NULL);
 
 		g_object_set_data_full (
 			G_OBJECT (action), "word",
@@ -425,7 +413,6 @@ html_editor_spell_checkers_foreach (EHTMLEditor *editor,
 	g_list_free_full (list, (GDestroyNotify) g_free);
 	g_clear_object (&spell_checker);
 	g_free (path);
-	g_free (word);
 }
 
 void
@@ -460,7 +447,8 @@ action_set_visible_and_sensitive (GtkAction *action,
 
 static void
 html_editor_update_actions (EHTMLEditor *editor,
-                            EContentEditorNodeFlags flags)
+			    EContentEditorNodeFlags flags,
+			    const gchar *caret_word)
 {
 	EContentEditor *cnt_editor;
 	ESpellChecker *spell_checker;
@@ -550,13 +538,11 @@ html_editor_update_actions (EHTMLEditor *editor,
 	/* Decide if we should show spell checking items. */
 	visible = FALSE;
 	if (n_languages > 0) {
-		gchar *word = e_content_editor_get_caret_word (cnt_editor);
-		if (word && *word) {
-			visible = !e_spell_checker_check_word (spell_checker, word, -1);
+		if (caret_word && *caret_word) {
+			visible = !e_spell_checker_check_word (spell_checker, caret_word, -1);
 		} else {
 			visible = FALSE;
 		}
-		g_free (word);
 	}
 
 	action_group = editor->priv->spell_check_actions;
@@ -575,7 +561,7 @@ html_editor_update_actions (EHTMLEditor *editor,
 
 	/* Handle a single active language as a special case. */
 	if (n_languages == 1) {
-		html_editor_inline_spelling_suggestions (editor);
+		html_editor_inline_spelling_suggestions (editor, caret_word);
 		g_strfreev (languages);
 
 		e_html_editor_update_spell_actions (editor);
@@ -584,7 +570,7 @@ html_editor_update_actions (EHTMLEditor *editor,
 
 	/* Add actions and context menu content for active languages. */
 	for (ii = 0; ii < n_languages; ii++)
-		html_editor_spell_checkers_foreach (editor, languages[ii]);
+		html_editor_spell_checkers_foreach (editor, languages[ii], caret_word);
 
 	g_strfreev (languages);
 
@@ -621,6 +607,7 @@ html_editor_spell_languages_changed (EHTMLEditor *editor)
 typedef struct _ContextMenuData {
 	GWeakRef *editor_weakref; /* EHTMLEditor * */
 	EContentEditorNodeFlags flags;
+	gchar *caret_word;
 	GdkEvent *event;
 } ContextMenuData;
 
@@ -632,6 +619,7 @@ context_menu_data_free (gpointer ptr)
 	if (cmd) {
 		g_clear_pointer (&cmd->event, gdk_event_free);
 		e_weak_ref_free (cmd->editor_weakref);
+		g_free (cmd->caret_word);
 		g_free (cmd);
 	}
 }
@@ -660,7 +648,7 @@ html_editor_show_context_menu_idle_cb (gpointer user_data)
 
 		menu = e_html_editor_get_managed_widget (editor, "/context-menu");
 
-		g_signal_emit (editor, signals[UPDATE_ACTIONS], 0, cmd->flags);
+		g_signal_emit (editor, signals[UPDATE_ACTIONS], 0, cmd->flags, cmd->caret_word);
 
 		if (!gtk_menu_get_attach_widget (GTK_MENU (menu))) {
 			gtk_menu_attach_to_widget (GTK_MENU (menu), GTK_WIDGET (editor), NULL);
@@ -678,25 +666,25 @@ html_editor_show_context_menu_idle_cb (gpointer user_data)
 	return FALSE;
 }
 
-static gboolean
+static void
 html_editor_context_menu_requested_cb (EContentEditor *cnt_editor,
-                                       EContentEditorNodeFlags flags,
-                                       GdkEvent *event,
-                                       EHTMLEditor *editor)
+				       EContentEditorNodeFlags flags,
+				       const gchar *caret_word,
+				       GdkEvent *event,
+				       EHTMLEditor *editor)
 {
 	ContextMenuData *cmd;
 
-	g_return_val_if_fail (E_IS_HTML_EDITOR (editor), FALSE);
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
 
 	cmd = g_new0 (ContextMenuData, 1);
 	cmd->editor_weakref = e_weak_ref_new (editor);
 	cmd->flags = flags;
+	cmd->caret_word = g_strdup (caret_word);
 	cmd->event = gdk_event_copy (event);
 
 	g_idle_add_full (G_PRIORITY_LOW, html_editor_show_context_menu_idle_cb,
 		cmd, context_menu_data_free);
-
-	return TRUE;
 }
 
 static gchar *
@@ -1029,9 +1017,10 @@ e_html_editor_class_init (EHTMLEditorClass *class)
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (EHTMLEditorClass, update_actions),
 		NULL, NULL,
-		g_cclosure_marshal_VOID__UINT,
-		G_TYPE_NONE, 1,
-		G_TYPE_UINT);
+		NULL,
+		G_TYPE_NONE, 2,
+		G_TYPE_UINT,
+		G_TYPE_STRING);
 
 	signals[SPELL_LANGUAGES_CHANGED] = g_signal_new (
 		"spell-languages-changed",

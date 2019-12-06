@@ -451,8 +451,9 @@ struct _EContentEditorInterface {
 	void		(*load_finished)		(EContentEditor *editor);
 	gboolean	(*paste_clipboard)		(EContentEditor *editor);
 	gboolean	(*paste_primary_clipboard)	(EContentEditor *editor);
-	gboolean	(*context_menu_requested)	(EContentEditor *editor,
+	void		(*context_menu_requested)	(EContentEditor *editor,
 							 EContentEditorNodeFlags flags,
+							 const gchar *caret_word,
 							 GdkEvent *event);
 	void		(*find_done)			(EContentEditor *editor,
 							 guint match_count);
@@ -1099,9 +1100,10 @@ gboolean	e_content_editor_emit_paste_clipboard
 						(EContentEditor *editor);
 gboolean	e_content_editor_emit_paste_primary_clipboard
 						(EContentEditor *editor);
-gboolean	e_content_editor_emit_context_menu_requested
+void		e_content_editor_emit_context_menu_requested
 						(EContentEditor *editor,
 						 EContentEditorNodeFlags flags,
+						 const gchar *caret_word,
 						 GdkEvent *event);
 void		e_content_editor_emit_find_done	(EContentEditor *editor,
 						 guint match_count);

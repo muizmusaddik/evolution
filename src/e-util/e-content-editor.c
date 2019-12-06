@@ -548,10 +548,11 @@ e_content_editor_default_init (EContentEditorInterface *iface)
 		E_TYPE_CONTENT_EDITOR,
 		G_SIGNAL_RUN_LAST,
 		G_STRUCT_OFFSET (EContentEditorInterface, context_menu_requested),
-		g_signal_accumulator_true_handled, NULL,
+		NULL, NULL,
 		NULL,
-		G_TYPE_BOOLEAN, 2,
+		G_TYPE_NONE, 3,
 		G_TYPE_INT,
+		G_TYPE_STRING,
 		GDK_TYPE_EVENT | G_SIGNAL_TYPE_STATIC_SCOPE);
 
 	/**
@@ -4111,18 +4112,15 @@ e_content_editor_emit_paste_primary_clipboard (EContentEditor *editor)
 	return handled;
 }
 
-gboolean
+void
 e_content_editor_emit_context_menu_requested (EContentEditor *editor,
-                                              EContentEditorNodeFlags flags,
-                                              GdkEvent *event)
+					      EContentEditorNodeFlags flags,
+					      const gchar *caret_word,
+					      GdkEvent *event)
 {
-	gboolean handled = FALSE;
+	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
 
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
-
-	g_signal_emit (editor, signals[CONTEXT_MENU_REQUESTED], 0, flags, event, &handled);
-
-	return handled;
+	g_signal_emit (editor, signals[CONTEXT_MENU_REQUESTED], 0, flags, caret_word, event, NULL);
 }
 
 void

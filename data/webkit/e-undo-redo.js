@@ -327,7 +327,7 @@ var EvoUndoRedo = {
 	delete all nodes between index >= firstChildIndex && index < children.length - restChildrenCount.
 	*/
 
-	dropTarget : null, // passed from drop_cb() into before_input_cb()/input_cb() for "insertFromDrop" event
+	dropTarget : null, // passed from dropCb() into beforeInputCb()/inputCb() for "insertFromDrop" event
 	disabled : 0,
 	ongoingRecordings : [] // the recordings can be nested
 };
@@ -335,9 +335,9 @@ var EvoUndoRedo = {
 EvoUndoRedo.Attach = function()
 {
 	if (document.documentElement) {
-		document.documentElement.onbeforeinput = EvoUndoRedo.before_input_cb;
-		document.documentElement.oninput = EvoUndoRedo.input_cb;
-		document.documentElement.ondrop = EvoUndoRedo.drop_cb;
+		document.documentElement.onbeforeinput = EvoUndoRedo.beforeInputCb;
+		document.documentElement.oninput = EvoUndoRedo.inputCb;
+		document.documentElement.ondrop = EvoUndoRedo.dropCb;
 	}
 }
 
@@ -376,7 +376,7 @@ EvoUndoRedo.isWordDelimEvent = function(inputEvent)
 		(inputEvent.data == " " || inputEvent.data == "\t");
 }
 
-EvoUndoRedo.before_input_cb = function(inputEvent)
+EvoUndoRedo.beforeInputCb = function(inputEvent)
 {
 	if (EvoUndoRedo.disabled) {
 		return;
@@ -450,7 +450,7 @@ EvoUndoRedo.before_input_cb = function(inputEvent)
 	}
 }
 
-EvoUndoRedo.input_cb = function(inputEvent)
+EvoUndoRedo.inputCb = function(inputEvent)
 {
 	var isWordDelim = EvoUndoRedo.isWordDelimEvent(inputEvent);
 
@@ -484,7 +484,7 @@ EvoUndoRedo.input_cb = function(inputEvent)
 	EvoEditor.AfterInputEvent(inputEvent, isWordDelim);
 }
 
-EvoUndoRedo.drop_cb = function(event)
+EvoUndoRedo.dropCb = function(event)
 {
 	EvoUndoRedo.dropTarget = event.toElement;
 }

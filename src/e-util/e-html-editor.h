@@ -64,7 +64,8 @@ struct _EHTMLEditorClass {
 	GtkGridClass parent_class;
 
 	void		(*update_actions)	(EHTMLEditor *editor,
-						 EContentEditorNodeFlags flags);
+						 EContentEditorNodeFlags flags,
+						 const gchar *caret_word);
 
 	void		(*spell_languages_changed)
 						(EHTMLEditor *editor);

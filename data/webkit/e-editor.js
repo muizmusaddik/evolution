@@ -29,34 +29,43 @@ var EvoEditor = {
 	EMAIL_PATTERN : "[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}" +
 			"[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*+",
 
-	E_CONTENT_EDITOR_ALIGNMENT_NONE : -1,
-	E_CONTENT_EDITOR_ALIGNMENT_LEFT : 0,
-	E_CONTENT_EDITOR_ALIGNMENT_CENTER : 1,
-	E_CONTENT_EDITOR_ALIGNMENT_RIGHT : 2,
-	E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY : 3,
+	E_CONTENT_EDITOR_ALIGNMENT_NONE		: -1,
+	E_CONTENT_EDITOR_ALIGNMENT_LEFT		: 0,
+	E_CONTENT_EDITOR_ALIGNMENT_CENTER	: 1,
+	E_CONTENT_EDITOR_ALIGNMENT_RIGHT	: 2,
+	E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY	: 3,
 
-	E_CONTENT_EDITOR_BLOCK_FORMAT_NONE : 0,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH : 1,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_PRE : 2,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_ADDRESS : 3,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H1 : 4,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H2 : 5,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H3 : 6,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H4 : 7,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H5 : 8,
-	E_CONTENT_EDITOR_BLOCK_FORMAT_H6 : 9,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_NONE	: 0,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_PARAGRAPH	: 1,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_PRE	: 2,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_ADDRESS	: 3,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H1	: 4,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H2	: 5,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H3	: 6,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H4	: 7,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H5	: 8,
+	E_CONTENT_EDITOR_BLOCK_FORMAT_H6	: 9,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_UNORDERED_LIST : 10,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST : 11,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ROMAN : 12,
 	E_CONTENT_EDITOR_BLOCK_FORMAT_ORDERED_LIST_ALPHA : 13,
 
-	E_CONTENT_EDITOR_GET_INLINE_IMAGES : 1 << 0,
-	E_CONTENT_EDITOR_GET_RAW_BODY_HTML : 1 << 1,
-	E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN : 1 << 2,
-	E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED : 1 << 3,
-	E_CONTENT_EDITOR_GET_RAW_DRAFT : 1 << 4,
-	E_CONTENT_EDITOR_GET_TO_SEND_HTML : 1 << 5,
-	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN : 1 << 6,
+	E_CONTENT_EDITOR_GET_INLINE_IMAGES	: 1 << 0,
+	E_CONTENT_EDITOR_GET_RAW_BODY_HTML	: 1 << 1,
+	E_CONTENT_EDITOR_GET_RAW_BODY_PLAIN	: 1 << 2,
+	E_CONTENT_EDITOR_GET_RAW_BODY_STRIPPED	: 1 << 3,
+	E_CONTENT_EDITOR_GET_RAW_DRAFT		: 1 << 4,
+	E_CONTENT_EDITOR_GET_TO_SEND_HTML	: 1 << 5,
+	E_CONTENT_EDITOR_GET_TO_SEND_PLAIN	: 1 << 6,
+
+	E_CONTENT_EDITOR_NODE_UNKNOWN		: 0,
+	E_CONTENT_EDITOR_NODE_IS_ANCHOR		: 1 << 0,
+	E_CONTENT_EDITOR_NODE_IS_H_RULE		: 1 << 1,
+	E_CONTENT_EDITOR_NODE_IS_IMAGE		: 1 << 2,
+	E_CONTENT_EDITOR_NODE_IS_TABLE		: 1 << 3,
+	E_CONTENT_EDITOR_NODE_IS_TABLE_CELL	: 1 << 4,
+	E_CONTENT_EDITOR_NODE_IS_TEXT		: 1 << 5,
+	E_CONTENT_EDITOR_NODE_IS_TEXT_COLLAPSED	: 1 << 6,
 
 	/* Flags for ClaimAffectedContent() */
 	CLAIM_CONTENT_FLAG_NONE : 0,
@@ -78,6 +87,7 @@ var EvoEditor = {
 
 	mode : 1, // one of the MODE constants
 	storedSelection : null,
+	propertiesSelection : null, // dedicated to Properties dialogs
 	inheritThemeColors : false,
 	checkInheritFontsOnChange : false,
 	forceFormatStateUpdate : false,
@@ -169,7 +179,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 
 	tmp = computedStyle ? computedStyle.webkitTextDecorationsInEffect : "";
 
-	value = tmp.search("underline") >= 0;
+	value = tmp.search("underline") >= 0 && (!baseElem || baseElem.tagName != "A");
 	if (force || value != EvoEditor.formattingState.underline) {
 		EvoEditor.formattingState.underline = value;
 		changes["underline"] = value;
@@ -264,7 +274,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	};
 
 	for (parent = baseElem; parent && !(parent == document.body) && (
-	     obj.script == 0 || obj.blockFormat == null || obj.fontSize == null || obj.indented == null ||obj.bgColor == null);
+	     obj.script == 0 || obj.blockFormat == null || obj.fontSize == null || obj.indented == null || obj.bgColor == null);
 	     parent = parent.parentElement) {
 		if (obj.script == 0) {
 			if (parent.tagName == "SUB")
@@ -1548,9 +1558,56 @@ EvoEditor.SetBodyFontName = function(name)
 	}
 }
 
+EvoEditor.beforeInputCb = function(inputEvent)
+{
+	if (EvoUndoRedo.disabled ||
+	    !inputEvent ||
+	    inputEvent.inputType != "insertText" ||
+	    !inputEvent.data ||
+	    inputEvent.data.length != 1 ||
+	    inputEvent.data == " " ||
+	    inputEvent.data == "\t")
+		return;
+
+	var selection = document.getSelection();
+
+	// when writing at the end of the anchor, then write into the anchor, not out (WebKit writes out)
+	if (!selection ||
+	    !selection.isCollapsed ||
+	    !selection.baseNode ||
+	    selection.baseNode.nodeType != selection.baseNode.TEXT_NODE ||
+	    selection.baseOffset != selection.baseNode.nodeValue.length ||
+	    !selection.baseNode.parentElement ||
+	    selection.baseNode.parentElement.tagName != "A")
+		return;
+
+	var node = selection.baseNode;
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "insertText", selection.baseNode, selection.baseNode,
+		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+
+	try {
+		node.nodeValue += inputEvent.data;
+		selection.setPosition(node, node.nodeValue.length);
+
+		if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT)
+			node.parentElement.href = node.nodeValue;
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, "insertText");
+	}
+
+	// it will add the text, if anything breaks before it gets here
+	inputEvent.stopImmediatePropagation();
+	inputEvent.stopPropagation();
+	inputEvent.preventDefault();
+}
+
 EvoEditor.initializeContent = function()
 {
 	if (document.body) {
+		// attach on body, thus it runs before EvoUndoRedo.beforeInputCb()
+		document.body.onbeforeinput = EvoEditor.beforeInputCb;
+
 		if (!document.body.firstChild) {
 			EvoUndoRedo.Disable();
 			try {
@@ -2229,6 +2286,191 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	}
 }
 
+EvoEditor.getCaretElement = function(tagName)
+{
+	var node;
+
+	node = document.getSelection().extentNode;
+
+	if (!node)
+		node = document.getSelection().baseNode;
+
+	while (node && node.nodeType != node.ELEMENT_NODE) {
+		node = node.parentElement;
+	}
+
+	if (node && node.tagName == tagName)
+		return node;
+
+	return null;
+}
+
+EvoEditor.storePropertiesSelection = function()
+{
+	EvoEditor.propertiesSelection = EvoSelection.Store(document);
+}
+
+EvoEditor.restorePropertiesSelection = function()
+{
+	if (EvoEditor.propertiesSelection) {
+		var selection = EvoEditor.propertiesSelection;
+
+		EvoEditor.propertiesSelection = null;
+
+		try {
+			// Ignore any errors here
+			EvoSelection.Restore(document, selection);
+		} catch (exception) {
+		}
+	}
+}
+
+EvoEditor.OnPropertiesOpen = function()
+{
+	EvoEditor.storePropertiesSelection();
+}
+
+EvoEditor.OnPropertiesClose = function()
+{
+	EvoEditor.restorePropertiesSelection();
+}
+
+EvoEditor.GetLinkValues = function()
+{
+	var res = null, anchor = EvoEditor.getCaretElement("A");
+
+	if (anchor) {
+		res = [];
+		res["href"] = anchor.href;
+		res["text"] = anchor.innerText;
+	} else if (!document.getSelection().isCollapsed && document.getSelection().rangeCount > 0) {
+		var range;
+
+		range = document.getSelection().getRangeAt(0);
+
+		if (range) {
+			res = [];
+			res["text"] = range.toString();
+		}
+	}
+
+	return res;
+}
+
+EvoEditor.SetLinkValues = function(href, text)
+{
+	// The properties dialog can discard selection, thus restore it before doing changes
+	EvoEditor.restorePropertiesSelection();
+
+	var anchor = EvoEditor.getCaretElement("A");
+
+	if (anchor && (anchor.href != href || anchor.innerText != text)) {
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetLinkValues", anchor, anchor, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+		try {
+			if (anchor.href != href)
+				anchor.href = href;
+			if (anchor.innerText != text) {
+				var selection = EvoSelection.Store(document);
+				anchor.innerText = text;
+				EvoSelection.Restore(document, selection);
+			}
+		} finally {
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetLinkValues");
+		}
+	} else if (!anchor && href != "" && text != "") {
+		text = text.replace(/\&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		href = href.replace(/\&/g, "&amp;").replace(/\"/g, "&quot;");
+
+		EvoEditor.InsertHTML("CreateLink", "<A href=\"" + href + "\">" + text + "</A>");
+	}
+}
+
+EvoEditor.Unlink = function()
+{
+	// The properties dialog can discard selection, thus restore it before doing changes
+	EvoEditor.restorePropertiesSelection();
+
+	var anchor = EvoEditor.getCaretElement("A");
+
+	if (anchor) {
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "Unlink", anchor.parentElement, anchor.parentElement, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+		try {
+			var selectionUpdater = EvoSelection.CreateUpdaterObject(), firstChild;
+
+			firstChild = anchor.firstChild;
+
+			while (anchor.firstChild) {
+				anchor.parentElement.insertBefore(anchor.firstChild, anchor);
+			}
+
+			selectionUpdater.beforeRemove(anchor);
+			anchor.parentElement.removeChild(anchor);
+			selectionUpdater.afterRemove(firstChild);
+
+			selectionUpdater.restore();
+		} finally {
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "Unlink");
+		}
+	}
+}
+
+EvoEditor.GetCaretWord = function()
+{
+	if (document.getSelection().rangeCount < 1)
+		return null;
+
+	var range = document.getSelection().getRangeAt(0);
+
+	if (!range)
+		return null;
+
+	range = range.cloneRange();
+	range.expand("word");
+
+	return range.toString();
+}
+
+EvoEditor.onContextMenu = function(event)
+{
+	var node = event.target;
+
+	if (!node)
+		node = document.getSelection().extentNode;
+	if (!node)
+		node = document.getSelection().baseNode;
+
+	var nodeFlags = EvoEditor.E_CONTENT_EDITOR_NODE_UNKNOWN, hasNode = node, res;
+
+	while (node) {
+		if (node.tagName == "A")
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_ANCHOR;
+		else if (node.tagName == "HR")
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_H_RULE;
+		else if (node.tagName == "IMG")
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_IMAGE;
+		else if (node.tagName == "TABLE")
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TABLE;
+		else if (node.tagName == "TD" || node.tagName == "TH")
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_CELL;
+
+		node = node.parentElement;
+	}
+
+	if (!nodeFlags && hasNode)
+		nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TEXT;
+
+	if (document.getSelection().isCollapsed)
+		nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TEXT_COLLAPSED;
+
+	res = [];
+
+	res["nodeFlags"] = nodeFlags;
+	res["caretWord"] = EvoEditor.GetCaretWord();
+
+	window.webkit.messageHandlers.contextMenuRequested.postMessage(res);
+}
+
+document.oncontextmenu = EvoEditor.onContextMenu;
 document.onload = EvoEditor.initializeContent;
 
 document.onselectionchange = function() {
