@@ -2579,22 +2579,9 @@ e_content_editor_insert_row_below (EContentEditor *editor)
 	iface->insert_row_below (editor);
 }
 
-gboolean
-e_content_editor_on_h_rule_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_val_if_fail (iface != NULL, FALSE);
-	g_return_val_if_fail (iface->on_h_rule_dialog_open != NULL, FALSE);
-
-	return iface->on_h_rule_dialog_open (editor);
-}
-
 void
-e_content_editor_on_h_rule_dialog_close (EContentEditor *editor)
+e_content_editor_on_dialog_open (EContentEditor *editor,
+				 const gchar *name)
 {
 	EContentEditorInterface *iface;
 
@@ -2602,9 +2589,24 @@ e_content_editor_on_h_rule_dialog_close (EContentEditor *editor)
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
 	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_h_rule_dialog_close != NULL);
+	g_return_if_fail (iface->on_dialog_open != NULL);
 
-	iface->on_h_rule_dialog_close (editor);
+	iface->on_dialog_open (editor, name);
+}
+
+void
+e_content_editor_on_dialog_close (EContentEditor *editor,
+				  const gchar *name)
+{
+	EContentEditorInterface *iface;
+
+	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
+
+	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
+	g_return_if_fail (iface != NULL);
+	g_return_if_fail (iface->on_dialog_close != NULL);
+
+	iface->on_dialog_close (editor, name);
 }
 
 void
@@ -2724,34 +2726,6 @@ e_content_editor_h_rule_get_no_shade (EContentEditor *editor)
 	g_return_val_if_fail (iface->h_rule_get_no_shade != NULL, FALSE);
 
 	return iface->h_rule_get_no_shade (editor);
-}
-
-void
-e_content_editor_on_image_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_image_dialog_open != NULL);
-
-	iface->on_image_dialog_open (editor);
-}
-
-void
-e_content_editor_on_image_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_image_dialog_close != NULL);
-
-	iface->on_image_dialog_close (editor);
 }
 
 void
@@ -3076,7 +3050,9 @@ e_content_editor_image_set_height_follow (EContentEditor *editor,
 }
 
 void
-e_content_editor_on_link_dialog_open (EContentEditor *editor)
+e_content_editor_link_get_properties (EContentEditor *editor,
+				      gchar **href,
+				      gchar **text)
 {
 	EContentEditorInterface *iface;
 
@@ -3084,13 +3060,15 @@ e_content_editor_on_link_dialog_open (EContentEditor *editor)
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
 	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_link_dialog_open != NULL);
+	g_return_if_fail (iface->link_get_properties != NULL);
 
-	iface->on_link_dialog_open (editor);
+	iface->link_get_properties (editor, href, text);
 }
 
 void
-e_content_editor_on_link_dialog_close (EContentEditor *editor)
+e_content_editor_link_set_properties (EContentEditor *editor,
+				      const gchar *href,
+				      const gchar *text)
 {
 	EContentEditorInterface *iface;
 
@@ -3098,69 +3076,9 @@ e_content_editor_on_link_dialog_close (EContentEditor *editor)
 
 	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
 	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_link_dialog_close != NULL);
+	g_return_if_fail (iface->link_set_properties != NULL);
 
-	iface->on_link_dialog_close (editor);
-}
-
-void
-e_content_editor_link_get_values (EContentEditor *editor,
-                                  gchar **href,
-                                  gchar **text)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->link_get_values != NULL);
-
-	return iface->link_get_values (editor, href, text);
-}
-
-void
-e_content_editor_link_set_values (EContentEditor *editor,
-                                  const gchar *href,
-                                  const gchar *text)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->link_set_values != NULL);
-
-	iface->link_set_values (editor, href, text);
-}
-
-void
-e_content_editor_on_page_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_page_dialog_open != NULL);
-
-	iface->on_page_dialog_open (editor);
-}
-
-void
-e_content_editor_on_page_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_page_dialog_close != NULL);
-
-	iface->on_page_dialog_close (editor);
+	iface->link_set_properties (editor, href, text);
 }
 
 void
@@ -3348,34 +3266,6 @@ e_content_editor_page_get_background_image_uri (EContentEditor *editor)
 	g_return_val_if_fail (iface->page_get_background_image_uri != NULL, NULL);
 
 	return iface->page_get_background_image_uri (editor);
-}
-
-void
-e_content_editor_on_cell_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_cell_dialog_open != NULL);
-
-	iface->on_cell_dialog_open (editor);
-}
-
-void
-e_content_editor_on_cell_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_cell_dialog_close != NULL);
-
-	iface->on_cell_dialog_close (editor);
 }
 
 void
@@ -3919,62 +3809,6 @@ e_content_editor_table_set_background_color (EContentEditor *editor,
 	iface->table_set_background_color (editor, value);
 }
 
-gboolean
-e_content_editor_on_table_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_val_if_fail (iface != NULL, FALSE);
-	g_return_val_if_fail (iface->on_table_dialog_open != NULL, FALSE);
-
-	return iface->on_table_dialog_open (editor);
-}
-
-void
-e_content_editor_on_table_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_table_dialog_close != NULL);
-
-	iface->on_table_dialog_close (editor);
-}
-
-void
-e_content_editor_on_spell_check_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_spell_check_dialog_close != NULL);
-
-	iface->on_spell_check_dialog_close (editor);
-}
-
-void
-e_content_editor_on_spell_check_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_spell_check_dialog_close != NULL);
-
-	iface->on_spell_check_dialog_close (editor);
-}
-
 gchar *
 e_content_editor_spell_check_next_word (EContentEditor *editor,
                                         const gchar *word)
@@ -4003,62 +3837,6 @@ e_content_editor_spell_check_prev_word (EContentEditor *editor,
 	g_return_val_if_fail (iface->spell_check_prev_word != NULL, NULL);
 
 	return iface->spell_check_prev_word (editor, word);
-}
-
-void
-e_content_editor_on_replace_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_replace_dialog_open != NULL);
-
-	iface->on_replace_dialog_open (editor);
-}
-
-void
-e_content_editor_on_replace_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_replace_dialog_close != NULL);
-
-	iface->on_replace_dialog_close (editor);
-}
-
-void
-e_content_editor_on_find_dialog_open (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_find_dialog_open != NULL);
-
-	iface->on_find_dialog_open (editor);
-}
-
-void
-e_content_editor_on_find_dialog_close (EContentEditor *editor)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->on_find_dialog_close != NULL);
-
-	iface->on_find_dialog_close (editor);
 }
 
 void

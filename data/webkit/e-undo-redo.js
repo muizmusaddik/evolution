@@ -588,7 +588,7 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	}
 
 	if (!EvoUndoRedo.ongoingRecordings.length) {
-		throw "EvoUndoRedo:StopRecord: Nothing is recorded";
+		throw "EvoUndoRedo:StopRecord: Nothing is recorded for kind:" + kind + " opType:'" + opType + "'";
 	}
 
 	var record = EvoUndoRedo.ongoingRecordings[EvoUndoRedo.ongoingRecordings.length - 1];

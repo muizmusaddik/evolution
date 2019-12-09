@@ -107,7 +107,7 @@ const gchar *	e_html_editor_get_content_editor_name
 						(EHTMLEditor *editor);
 GtkWidget *	e_html_editor_util_create_font_name_combo
 						(void);
-gchar *		e_html_editor_until_dup_font_id	(GtkComboBox *combo_box,
+gchar *		e_html_editor_util_dup_font_id	(GtkComboBox *combo_box,
 						 const gchar *font_name);
 
 G_END_DECLS

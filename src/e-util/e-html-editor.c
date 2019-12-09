@@ -134,8 +134,8 @@ e_html_editor_util_create_font_name_combo (void)
 }
 
 gchar *
-e_html_editor_until_dup_font_id (GtkComboBox *combo_box,
-				 const gchar *font_name)
+e_html_editor_util_dup_font_id (GtkComboBox *combo_box,
+				const gchar *font_name)
 {
 	GtkTreeModel *model;
 	GtkTreeIter iter;

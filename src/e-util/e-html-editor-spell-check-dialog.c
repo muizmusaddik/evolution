@@ -303,7 +303,7 @@ html_editor_spell_check_dialog_show (GtkWidget *widget)
 		editor = e_html_editor_dialog_get_editor (E_HTML_EDITOR_DIALOG (dialog));
 		cnt_editor = e_html_editor_get_content_editor (editor);
 
-		e_content_editor_on_spell_check_dialog_open (cnt_editor);
+		e_content_editor_on_dialog_open (cnt_editor, E_CONTENT_EDITOR_DIALOG_SPELLCHECK);
 
 		GTK_WIDGET_CLASS (e_html_editor_spell_check_dialog_parent_class)->show (widget);
 	}
@@ -319,7 +319,7 @@ html_editor_spell_check_dialog_hide (GtkWidget *widget)
 	editor = e_html_editor_dialog_get_editor (E_HTML_EDITOR_DIALOG (dialog));
 	cnt_editor = e_html_editor_get_content_editor (editor);
 
-	e_content_editor_on_spell_check_dialog_close (cnt_editor);
+	e_content_editor_on_dialog_close (cnt_editor, E_CONTENT_EDITOR_DIALOG_SPELLCHECK);
 
 	/* Chain up to parent implementation */
 	GTK_WIDGET_CLASS (e_html_editor_spell_check_dialog_parent_class)->hide (widget);

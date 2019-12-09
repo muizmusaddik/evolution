@@ -2208,7 +2208,7 @@ e_html_editor_content_editor_font_name_to_combo_box (GBinding *binding,
 {
 	gchar *id = NULL;
 
-	id = e_html_editor_until_dup_font_id (GTK_COMBO_BOX (g_binding_get_target (binding)), g_value_get_string (from_value));
+	id = e_html_editor_util_dup_font_id (GTK_COMBO_BOX (g_binding_get_target (binding)), g_value_get_string (from_value));
 	g_value_take_string (to_value, id ? id : g_strdup (""));
 
 	return TRUE;

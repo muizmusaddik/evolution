@@ -307,7 +307,7 @@ html_editor_page_dialog_show (GtkWidget *widget)
 	editor = e_html_editor_dialog_get_editor (E_HTML_EDITOR_DIALOG (dialog));
 	cnt_editor = e_html_editor_get_content_editor (editor);
 
-	e_content_editor_on_page_dialog_open (cnt_editor);
+	e_content_editor_on_dialog_open (cnt_editor, E_CONTENT_EDITOR_DIALOG_PAGE);
 
 	uri = e_content_editor_page_get_background_image_uri (cnt_editor);
 	if (uri && *uri) {
@@ -346,7 +346,7 @@ html_editor_page_dialog_show (GtkWidget *widget)
 	e_color_combo_set_current_color (
 		E_COLOR_COMBO (dialog->priv->background_color_picker), &rgba);
 
-	font_name = e_html_editor_until_dup_font_id (GTK_COMBO_BOX (dialog->priv->text_font_name_combo),
+	font_name = e_html_editor_util_dup_font_id (GTK_COMBO_BOX (dialog->priv->text_font_name_combo),
 		e_content_editor_page_get_font_name (cnt_editor));
 	gtk_combo_box_set_active_id (GTK_COMBO_BOX (dialog->priv->text_font_name_combo), font_name ? font_name : "");
 	g_free (font_name);
@@ -365,7 +365,7 @@ html_editor_page_dialog_hide (GtkWidget *widget)
 	editor = e_html_editor_dialog_get_editor (E_HTML_EDITOR_DIALOG (dialog));
 	cnt_editor = e_html_editor_get_content_editor (editor);
 
-	e_content_editor_on_page_dialog_close (cnt_editor);
+	e_content_editor_on_dialog_close (cnt_editor, E_CONTENT_EDITOR_DIALOG_PAGE);
 
 	GTK_WIDGET_CLASS (e_html_editor_page_dialog_parent_class)->hide (widget);
 }

@@ -5288,6 +5288,8 @@ main (gint argc,
 	e_util_init_main_thread (NULL);
 	e_passwords_init ();
 
+	gtk_icon_theme_append_search_path (gtk_icon_theme_get_default (), EVOLUTION_ICONDIR);
+
 	modules = e_module_load_all_in_directory (EVOLUTION_MODULEDIR);
 	g_list_free_full (modules, (GDestroyNotify) g_type_module_unuse);
 

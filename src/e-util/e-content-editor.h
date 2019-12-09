@@ -33,6 +33,16 @@
 
 #define DEFAULT_CONTENT_EDITOR_NAME "WebKit"
 
+#define E_CONTENT_EDITOR_DIALOG_HRULE		"hrule"
+#define E_CONTENT_EDITOR_DIALOG_IMAGE		"image"
+#define E_CONTENT_EDITOR_DIALOG_LINK		"link"
+#define E_CONTENT_EDITOR_DIALOG_PAGE		"page"
+#define E_CONTENT_EDITOR_DIALOG_CELL		"cell"
+#define E_CONTENT_EDITOR_DIALOG_TABLE		"table"
+#define E_CONTENT_EDITOR_DIALOG_SPELLCHECK	"spellcheck"
+#define E_CONTENT_EDITOR_DIALOG_FIND		"find"
+#define E_CONTENT_EDITOR_DIALOG_REPLACE		"replace"
+
 G_BEGIN_DECLS
 
 struct _EHTMLEditor;
@@ -171,9 +181,11 @@ struct _EContentEditorInterface {
 
 	void		(*insert_row_below)		(EContentEditor *editor);
 
-	gboolean	(*on_h_rule_dialog_open)	(EContentEditor *editor);
+	void		(*on_dialog_open)		(EContentEditor *editor,
+							 const gchar *name);
 
-	void		(*on_h_rule_dialog_close)	(EContentEditor *editor);
+	void		(*on_dialog_close)		(EContentEditor *editor,
+							 const gchar *name);
 
 	void		(*h_rule_set_align)		(EContentEditor *editor,
 							 const gchar *value);
@@ -196,10 +208,6 @@ struct _EContentEditorInterface {
 							 gboolean value);
 
 	gboolean	(*h_rule_get_no_shade)		(EContentEditor *editor);
-
-	void		(*on_image_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_image_dialog_close)	(EContentEditor *editor);
 
 	void		(*image_set_src)		(EContentEditor *editor,
 							 const gchar *value);
@@ -256,21 +264,13 @@ struct _EContentEditorInterface {
 
 	gchar *		(*image_get_align)		(EContentEditor *editor);
 
-	void		(*on_link_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_link_dialog_close)		(EContentEditor *editor);
-
-	void		(*link_get_values)		(EContentEditor *editor,
+	void		(*link_get_properties)		(EContentEditor *editor,
 							 gchar **href,
 							 gchar **text);
 
-	void		(*link_set_values)		(EContentEditor *editor,
+	void		(*link_set_properties)		(EContentEditor *editor,
 							 const gchar *href,
 							 const gchar *text);
-
-	void		(*on_page_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_page_dialog_close)		(EContentEditor *editor);
 
 	void		(*page_set_text_color)		(EContentEditor *editor,
 							 const GdkRGBA *value);
@@ -305,10 +305,6 @@ struct _EContentEditorInterface {
 
 	gchar *		(*page_get_background_image_uri)
 							(EContentEditor *editor);
-
-	void		(*on_cell_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_cell_dialog_close)		(EContentEditor *editor);
 
 	void		(*cell_set_v_align)		(EContentEditor *editor,
 							 const gchar *value,
@@ -418,27 +414,11 @@ struct _EContentEditorInterface {
 	void		(*table_set_background_color)	(EContentEditor *editor,
 							 const GdkRGBA *value);
 
-	gboolean	(*on_table_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_table_dialog_close)	(EContentEditor *editor);
-
-	void		(*on_spell_check_dialog_open)	(EContentEditor *editor);
-
-	void		(*on_spell_check_dialog_close)	(EContentEditor *editor);
-
 	gchar *		(*spell_check_next_word)	(EContentEditor *editor,
 							 const gchar *word);
 
 	gchar *		(*spell_check_prev_word)	(EContentEditor *editor,
 							 const gchar *word);
-
-	void		(*on_replace_dialog_open)	(EContentEditor *editor);
-
-	void		(*on_replace_dialog_close)	(EContentEditor *editor);
-
-	void		(*on_find_dialog_open)		(EContentEditor *editor);
-
-	void		(*on_find_dialog_close)		(EContentEditor *editor);
 
 	void		(*resource_loaded)		(EContentEditor *editor,
 							 const gchar *uri,
@@ -730,11 +710,10 @@ void		e_content_editor_insert_row_above
 void		e_content_editor_insert_row_below
 						(EContentEditor *editor);
 
-gboolean	e_content_editor_on_h_rule_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_h_rule_dialog_close
-						(EContentEditor *editor);
+void		e_content_editor_on_dialog_open	(EContentEditor *editor,
+						 const gchar *name);
+void		e_content_editor_on_dialog_close(EContentEditor *editor,
+						 const gchar *name);
 
 void		e_content_editor_h_rule_set_align
 						(EContentEditor *editor,
@@ -764,12 +743,6 @@ void		e_content_editor_h_rule_set_no_shade
 						 gboolean value);
 
 gboolean	e_content_editor_h_rule_get_no_shade
-						(EContentEditor *editor);
-
-void		e_content_editor_on_image_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_image_dialog_close
 						(EContentEditor *editor);
 
 void		e_content_editor_image_set_src	(EContentEditor *editor,
@@ -842,18 +815,12 @@ void		e_content_editor_image_set_height_follow
 						(EContentEditor *editor,
 						 gboolean value);
 
-void		e_content_editor_on_link_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_link_dialog_close
-						(EContentEditor *editor);
-
-void		e_content_editor_link_get_values
+void		e_content_editor_link_get_properties
 						(EContentEditor *editor,
 						 gchar **href,
 						 gchar **text);
 
-void		e_content_editor_link_set_values
+void		e_content_editor_link_set_properties
 						(EContentEditor *editor,
 						 const gchar *href,
 						 const gchar *text);
@@ -861,12 +828,6 @@ void		e_content_editor_link_set_values
 void		e_content_editor_page_set_text_color
 						(EContentEditor *editor,
 						 const GdkRGBA *value);
-
-void		e_content_editor_on_page_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_page_dialog_close
-						(EContentEditor *editor);
 
 void		e_content_editor_page_get_text_color
 						(EContentEditor *editor,
@@ -907,12 +868,6 @@ void		e_content_editor_page_set_background_image_uri
 						 const gchar *uri);
 
 gchar *		e_content_editor_page_get_background_image_uri
-						(EContentEditor *editor);
-
-void		e_content_editor_on_cell_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_cell_dialog_close
 						(EContentEditor *editor);
 
 void		e_content_editor_cell_set_v_align
@@ -1048,18 +1003,6 @@ void		e_content_editor_table_set_background_color
 						(EContentEditor *editor,
 						 const GdkRGBA *value);
 
-gboolean	e_content_editor_on_table_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_table_dialog_close
-						(EContentEditor *editor);
-
-void		e_content_editor_on_spell_check_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_spell_check_dialog_close
-						(EContentEditor *editor);
-
 gchar *		e_content_editor_spell_check_next_word
 						(EContentEditor *editor,
 						 const gchar *word);
@@ -1072,18 +1015,6 @@ void		e_content_editor_spell_check_replace_all
 						(EContentEditor *editor,
 						 const gchar *word,
 						 const gchar *replacement);
-
-void		e_content_editor_on_replace_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_replace_dialog_close
-						(EContentEditor *editor);
-
-void		e_content_editor_on_find_dialog_open
-						(EContentEditor *editor);
-
-void		e_content_editor_on_find_dialog_close
-						(EContentEditor *editor);
 
 void		e_content_editor_resource_loaded(EContentEditor *editor,
 						 const gchar *uri,

@@ -88,6 +88,7 @@ var EvoEditor = {
 	mode : 1, // one of the MODE constants
 	storedSelection : null,
 	propertiesSelection : null, // dedicated to Properties dialogs
+	contextMenuNode : null, // the last target node for context menu
 	inheritThemeColors : false,
 	checkInheritFontsOnChange : false,
 	forceFormatStateUpdate : false,
@@ -2277,6 +2278,8 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 					EvoSelection.Restore(document, selection);
 				} finally {
 					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
+					EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+					EvoEditor.EmitContentChanged();
 				}
 			}
 		}
@@ -2325,17 +2328,186 @@ EvoEditor.restorePropertiesSelection = function()
 	}
 }
 
-EvoEditor.OnPropertiesOpen = function()
+EvoEditor.OnDialogOpen = function(name)
 {
-	EvoEditor.storePropertiesSelection();
+	EvoEditor.propertiesSelection = null;
+
+	var node = document.getElementById("x-evo-dialog-current-element");
+	while (node) {
+		node.removeAttribute("id");
+		node = document.getElementById("x-evo-dialog-current-element");
+	}
+
+	if (name == "link" || name == "cell" || name == "page") {
+		EvoEditor.storePropertiesSelection();
+
+		if (name == "cell") {
+			var tdnode, tdnode;
+
+			tdnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TD") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TD");
+			thnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TH") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TH");
+
+			if (tdnode === EvoEditor.contextMenuNode) {
+				node = tdnode;
+			} else if (thnode === EvoEditor.contextMenuNode) {
+				node = thnode;
+			} else if (tdnode && thnode) {
+				for (node = thnode; node; node = node.parentElement) {
+					if (node === tdnode) {
+						// TH is a child of TD
+						node = thnode;
+						break;
+					}
+				}
+
+				if (!node)
+					node = tdnode;
+			} else {
+				node = tdnode ? tdnode : thnode;
+			}
+
+			if (node)
+				node.id = "x-evo-dialog-current-element";
+		}
+
+		if (name == "cell" || name == "page")
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "Dialog::" + name);
+	} else if (name == "hrule" || name == "image" || name == "table") {
+		node = null;
+
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "Dialog::" + name);
+
+		if (name == "hrule") {
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "HR") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("HR");
+		} else if (name == "image") {
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "IMG") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("IMG");
+		} else if (name == "table") {
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TABLE") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TABLE");
+		}
+
+		if (node) {
+			node.id = "x-evo-dialog-current-element";
+		} else {
+			if (name == "hrule")
+				EvoEditor.InsertHTML("CreateHRule", "<HR id=\"x-evo-dialog-current-element\">");
+			else if (name == "image")
+				EvoEditor.InsertHTML("CreateImage", "<IMG id=\"x-evo-dialog-current-element\">");
+			else if (name == "table")
+				EvoEditor.InsertHTML("CreateTable", "<TABLE id=\"x-evo-dialog-current-element\"></TABLE>");
+		}
+	}
+
+	node = document.getElementById("x-evo-dialog-current-element");
+
+	if (node) {
+		node.removeAttribute("id"); // to not store it in the Undo/Redo record
+
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "Dialog::" + name + "::event", node, node,
+			EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+		EvoUndoRedo.Disable();
+
+		node.id = "x-evo-dialog-current-element";
+	}
 }
 
-EvoEditor.OnPropertiesClose = function()
+EvoEditor.OnDialogClose = function(name)
 {
-	EvoEditor.restorePropertiesSelection();
+	if (name == "link" || name == "cell")
+		EvoEditor.restorePropertiesSelection();
+	else
+		EvoEditor.propertiesSelection = null;
+
+	EvoEditor.contextMenuNode = null;
+
+	var node = document.getElementById("x-evo-dialog-current-element");
+
+	if (node) {
+		node.removeAttribute("id"); // to not store it in the Undo/Redo record
+
+		EvoUndoRedo.Enable();
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, "Dialog::" + name + "::event");
+	}
+
+	if (name == "hrule" || name == "image" || name == "table" || name == "cell" || name == "page")
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "Dialog::" + name);
+
+	node = document.getElementById("x-evo-dialog-current-element");
+	while (node) {
+		node.removeAttribute("id");
+		node = document.getElementById("x-evo-dialog-current-element");
+	}
 }
 
-EvoEditor.GetLinkValues = function()
+EvoEditor.applyDialogUtilsSetAttribute = function(record, isUndo)
+{
+	var element = EvoSelection.FindElementByPath(document.body, record.path);
+
+	if (!element)
+		throw "EvoEditor.applyDialogUtilsSetAttribute: Path not found";
+
+	var value;
+
+	if (isUndo)
+		value = record.beforeValue;
+	else
+		value = record.afterValue;
+
+	if (value == null)
+		element.removeAttribute(record.attrName);
+	else
+		element.setAttribute(record.attrName, value);
+}
+
+// 'value' can be 'null', to remove the attribute
+EvoEditor.DialogUtilsSetAttribute = function(name, value)
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (element) {
+		var record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DlgUtilSetAttribute::" + name, element, element, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+
+		try {
+			if (record) {
+				record.path = EvoSelection.GetChildPath(document.body, element);
+				record.attrName = name;
+				record.beforeValue = element.hasAttribute(name) ? element.getAttribute(name) : null;
+				record.afterValue = value;
+				record.apply = EvoEditor.applyDialogUtilsSetAttribute;
+			}
+
+			if (value != null) {
+				element.setAttribute(name, value);
+			} else {
+				element.removeAttribute(name);
+			}
+
+			if (record && record.beforeValue == record.afterValue) {
+				record.ignore = true;
+			}
+		} finally {
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DlgUtilSetAttribute::" + name);
+		}
+	}
+}
+
+EvoEditor.DialogUtilsGetAttribute = function(name)
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (element && element.hasAttribute(name))
+		return element.getAttribute(name);
+
+	return null;
+}
+
+EvoEditor.DialogUtilsHasAttribute = function(name)
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	return element && element.hasAttribute(name);
+}
+
+EvoEditor.LinkGetProperties = function()
 {
 	var res = null, anchor = EvoEditor.getCaretElement("A");
 
@@ -2357,7 +2529,7 @@ EvoEditor.GetLinkValues = function()
 	return res;
 }
 
-EvoEditor.SetLinkValues = function(href, text)
+EvoEditor.LinkSetProperties = function(href, text)
 {
 	// The properties dialog can discard selection, thus restore it before doing changes
 	EvoEditor.restorePropertiesSelection();
@@ -2376,6 +2548,8 @@ EvoEditor.SetLinkValues = function(href, text)
 			}
 		} finally {
 			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetLinkValues");
+			EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+			EvoEditor.EmitContentChanged();
 		}
 	} else if (!anchor && href != "" && text != "") {
 		text = text.replace(/\&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -2410,6 +2584,8 @@ EvoEditor.Unlink = function()
 			selectionUpdater.restore();
 		} finally {
 			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "Unlink");
+			EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+			EvoEditor.EmitContentChanged();
 		}
 	}
 }
@@ -2439,7 +2615,9 @@ EvoEditor.onContextMenu = function(event)
 	if (!node)
 		node = document.getSelection().baseNode;
 
-	var nodeFlags = EvoEditor.E_CONTENT_EDITOR_NODE_UNKNOWN, hasNode = node, res;
+	EvoEditor.contextMenuNode = node;
+
+	var nodeFlags = EvoEditor.E_CONTENT_EDITOR_NODE_UNKNOWN, res;
 
 	while (node) {
 		if (node.tagName == "A")
@@ -2456,7 +2634,7 @@ EvoEditor.onContextMenu = function(event)
 		node = node.parentElement;
 	}
 
-	if (!nodeFlags && hasNode)
+	if (!nodeFlags && EvoEditor.contextMenuNode)
 		nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TEXT;
 
 	if (document.getSelection().isCollapsed)
