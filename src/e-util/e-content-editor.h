@@ -142,17 +142,6 @@ struct _EContentEditorInterface {
 
 	void		(*selection_wrap)		(EContentEditor *editor);
 
-	void		(*get_caret_position)		(EContentEditor *editor,
-							 GCancellable *cancellable,
-							 GAsyncReadyCallback callback,
-							 gpointer user_data);
-
-	gboolean	(*get_caret_position_finish)	(EContentEditor *editor,
-							 GAsyncResult *result,
-							 guint *out_position,
-							 guint *out_offset,
-							 GError **error);
-
 	gchar *		(*get_current_signature_uid)	(EContentEditor *editor);
 
 	gboolean	(*is_ready)			(EContentEditor *editor);
@@ -658,19 +647,6 @@ void		e_content_editor_selection_restore
 						(EContentEditor *editor);
 
 void		e_content_editor_selection_wrap	(EContentEditor *editor);
-
-void		e_content_editor_get_caret_position
-						(EContentEditor *editor,
-						 GCancellable *cancellable,
-						 GAsyncReadyCallback callback,
-						 gpointer user_data);
-
-gboolean	e_content_editor_get_caret_position_finish
-						(EContentEditor *editor,
-						 GAsyncResult *result,
-						 guint *out_position,
-						 guint *out_offset,
-						 GError **error);
 
 gchar *		e_content_editor_get_current_signature_uid
 						(EContentEditor *editor);

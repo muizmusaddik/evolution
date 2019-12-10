@@ -2354,41 +2354,6 @@ e_content_editor_selection_wrap (EContentEditor *editor)
 	iface->selection_wrap (editor);
 }
 
-void
-e_content_editor_get_caret_position (EContentEditor *editor,
-				     GCancellable *cancellable,
-				     GAsyncReadyCallback callback,
-				     gpointer user_data)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->get_caret_position != NULL);
-
-	iface->get_caret_position (editor, cancellable, callback, user_data);
-}
-
-gboolean
-e_content_editor_get_caret_position_finish (EContentEditor *editor,
-					    GAsyncResult *result,
-					    guint *out_position,
-					    guint *out_offset,
-					    GError **error)
-{
-	EContentEditorInterface *iface;
-
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_val_if_fail (iface != NULL, FALSE);
-	g_return_val_if_fail (iface->get_caret_position_finish != NULL, FALSE);
-
-	return iface->get_caret_position_finish (editor, result, out_position, out_offset, error);
-}
-
 gchar *
 e_content_editor_get_current_signature_uid (EContentEditor *editor)
 {

@@ -408,28 +408,6 @@ finished:
 }
 
 static void
-launch_editor_caret_position_ready_cb (GObject *source_object,
-				       GAsyncResult *result,
-				       gpointer user_data)
-{
-	struct ExternalEditorData *eed = user_data;
-	GThread *editor_thread;
-	GError *error = NULL;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (source_object));
-	g_return_if_fail (eed != NULL);
-
-	if (!e_content_editor_get_caret_position_finish (E_CONTENT_EDITOR (source_object),
-		result, &eed->cursor_position, &eed->cursor_offset, &error)) {
-		g_warning ("%s: Failed to get caret position: %s", G_STRFUNC, error ? error->message : "Unknown error");
-	}
-
-	editor_thread = g_thread_new (NULL, external_editor_thread, eed);
-	g_thread_unref (editor_thread);
-	g_clear_error (&error);
-}
-
-static void
 launch_editor_content_ready_cb (GObject *source_object,
 				GAsyncResult *result,
 				gpointer user_data)
@@ -437,6 +415,7 @@ launch_editor_content_ready_cb (GObject *source_object,
 	struct ExternalEditorData *eed = user_data;
 	EContentEditor *cnt_editor;
 	EContentEditorContentHash *content_hash;
+	GThread *editor_thread;
 	GError *error = NULL;
 
 	g_return_if_fail (E_IS_CONTENT_EDITOR (source_object));
@@ -451,8 +430,8 @@ launch_editor_content_ready_cb (GObject *source_object,
 
 	eed->content = content_hash ? e_content_editor_util_get_content_data (content_hash, E_CONTENT_EDITOR_GET_TO_SEND_PLAIN) : NULL;
 
-	e_content_editor_get_caret_position (cnt_editor, NULL,
-		launch_editor_caret_position_ready_cb, eed);
+	editor_thread = g_thread_new (NULL, external_editor_thread, eed);
+	g_thread_unref (editor_thread);
 
 	e_content_editor_util_free_content_hash (content_hash);
 	g_clear_error (&error);

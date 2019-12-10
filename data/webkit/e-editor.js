@@ -67,6 +67,11 @@ var EvoEditor = {
 	E_CONTENT_EDITOR_NODE_IS_TEXT		: 1 << 5,
 	E_CONTENT_EDITOR_NODE_IS_TEXT_COLLAPSED	: 1 << 6,
 
+	E_CONTENT_EDITOR_SCOPE_CELL		: 0,
+	E_CONTENT_EDITOR_SCOPE_ROW		: 1,
+	E_CONTENT_EDITOR_SCOPE_COLUMN		: 2,
+	E_CONTENT_EDITOR_SCOPE_TABLE		: 3,
+
 	/* Flags for ClaimAffectedContent() */
 	CLAIM_CONTENT_FLAG_NONE : 0,
 	CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 1 << 0,
@@ -219,9 +224,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 	}
 
 	tmp = (computedStyle ? computedStyle.textAlign : "").toLowerCase();
-	if (tmp == "")
-		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
-	else if (tmp == "left" || tmp == "start")
+	if (tmp == "left" || tmp == "start")
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_LEFT;
 	else if (tmp == "right")
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_RIGHT;
@@ -229,8 +232,10 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_CENTER;
 	else if (tmp == "justify")
 		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_JUSTIFY;
+	else if ((computedStyle ? computedStyle.direction : "").toLowerCase() == "rtl")
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_RIGHT;
 	else
-		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_NONE;
+		value = EvoEditor.E_CONTENT_EDITOR_ALIGNMENT_LEFT;
 
 	if (force || value != EvoEditor.formattingState.alignment) {
 		EvoEditor.formattingState.alignment = value;
@@ -1966,7 +1971,7 @@ EvoEditor.convertHtmlToSend = function()
 
 EvoEditor.GetContent = function(flags, cid_uid_prefix)
 {
-	var content_data = {}, img_elems = [], elems, ii, jj;
+	var content_data = {}, img_elems = [], bkg_elems = [], elems, ii, jj;
 
 	if (!document.body)
 		return content_data;
@@ -2062,6 +2067,51 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 				}
 			}
 
+			images = document.querySelectorAll("[background]");
+			for (ii = 0; ii < images.length; ii++) {
+				var elem = images[ii];
+				var src = elem ? elem.getAttribute("background").toLowerCase() : "";
+
+				if (elem &&
+				    src.startsWith("data:") ||
+				    src.startsWith("file://") ||
+				    src.startsWith("evo-file://")) {
+					var bkg = elem.getAttribute("background");
+
+					for (jj = 0; jj < bkg_elems.length; jj++) {
+						if (bkg == bkg_elems[jj].orig_src) {
+							elem.subelems[elem.subelems.length] = elem;
+							elem.setAttribute("background", bkg_elems[jj].cid);
+							break;
+						}
+					}
+
+					if (jj >= bkg_elems.length) {
+						var bkg_obj = {
+							subelems : [ elem ],
+							cid : "cid:" + cid_uid_prefix + "-" + bkg_elems.length,
+							orig_src : bkg
+						};
+
+						// re-read, because it could change
+						if (elem.getAttribute("background").toLowerCase().startsWith("cid:"))
+							bkg_obj.cid = elem.getAttribute("background");
+
+						bkg_elems[bkg_elems.length] = bkg_obj;
+						images[images.length] = {
+							cid : bkg_obj.cid,
+							src : elem.getAttribute("background")
+						};
+						elem.setAttribute("background", bkg_obj.cid);
+					}
+				} else if (elem && src.startsWith("cid:")) {
+					images[images.length] = {
+						cid : elem.getAttribute("background"),
+						src : elem.getAttribute("background")
+					};
+				}
+			}
+
 			if (images.length)
 				content_data["images"] = images;
 		}
@@ -2089,6 +2139,14 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 
 				for (jj = 0; jj < img_obj.subelems.length; jj++) {
 					img_obj.subelems[jj].src = img_obj.orig_src;
+				}
+			}
+
+			for (ii = 0; ii < bkg_elems.length; ii++) {
+				var bkg_obj = bkg_elems[ii];
+
+				for (jj = 0; jj < bkg_obj.subelems.length; jj++) {
+					bkg_obj.subelems[jj].setAttribute("background", bkg_obj.orig_src);
 				}
 			}
 		} finally {
@@ -2289,17 +2347,24 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	}
 }
 
-EvoEditor.getCaretElement = function(tagName)
+EvoEditor.getParentElement = function(tagName, fromNode, canClimbUp)
 {
-	var node;
+	var node = fromNode;
 
-	node = document.getSelection().extentNode;
+	if (!node)
+		node = document.getSelection().extentNode;
 
 	if (!node)
 		node = document.getSelection().baseNode;
 
 	while (node && node.nodeType != node.ELEMENT_NODE) {
 		node = node.parentElement;
+	}
+
+	if (canClimbUp) {
+		while (node && node.tagName != tagName) {
+			node = node.parentElement;
+		}
 	}
 
 	if (node && node.tagName == tagName)
@@ -2342,10 +2407,10 @@ EvoEditor.OnDialogOpen = function(name)
 		EvoEditor.storePropertiesSelection();
 
 		if (name == "cell") {
-			var tdnode, tdnode;
+			var tdnode, thnode;
 
-			tdnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TD") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TD");
-			thnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TH") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TH");
+			tdnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TD") ? EvoEditor.contextMenuNode : EvoEditor.getParentElement("TD", null, false);
+			thnode = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TH") ? EvoEditor.contextMenuNode : EvoEditor.getParentElement("TH", null, false);
 
 			if (tdnode === EvoEditor.contextMenuNode) {
 				node = tdnode;
@@ -2378,11 +2443,11 @@ EvoEditor.OnDialogOpen = function(name)
 		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "Dialog::" + name);
 
 		if (name == "hrule") {
-			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "HR") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("HR");
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "HR") ? EvoEditor.contextMenuNode : EvoEditor.getParentElement("HR", null, false);
 		} else if (name == "image") {
-			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "IMG") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("IMG");
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "IMG") ? EvoEditor.contextMenuNode : EvoEditor.getParentElement("IMG", null, false);
 		} else if (name == "table") {
-			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TABLE") ? EvoEditor.contextMenuNode : EvoEditor.getCaretElement("TABLE");
+			node = (EvoEditor.contextMenuNode && EvoEditor.contextMenuNode.tagName == "TABLE") ? EvoEditor.contextMenuNode : EvoEditor.getParentElement("TABLE", null, true);
 		}
 
 		if (node) {
@@ -2438,7 +2503,7 @@ EvoEditor.OnDialogClose = function(name)
 	}
 }
 
-EvoEditor.applyDialogUtilsSetAttribute = function(record, isUndo)
+EvoEditor.applySetAttribute = function(record, isUndo)
 {
 	var element = EvoSelection.FindElementByPath(document.body, record.path);
 
@@ -2458,41 +2523,122 @@ EvoEditor.applyDialogUtilsSetAttribute = function(record, isUndo)
 		element.setAttribute(record.attrName, value);
 }
 
-// 'value' can be 'null', to remove the attribute
-EvoEditor.DialogUtilsSetAttribute = function(name, value)
+EvoEditor.setAttributeWithUndoRedo = function(opTypePrefix, element, name, value)
 {
-	var element = document.getElementById("x-evo-dialog-current-element");
+	if (!element)
+		return false;
 
+	if ((value == null && !element.hasAttribute(name)) ||
+	    (value != null && value == element.getAttribute(name)))
+		return false;
+
+	var record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opTypePrefix + "::" + name, element, element, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
+
+	try {
+		if (record) {
+			record.path = EvoSelection.GetChildPath(document.body, element);
+			record.attrName = name;
+			record.beforeValue = element.hasAttribute(name) ? element.getAttribute(name) : null;
+			record.afterValue = value;
+			record.apply = EvoEditor.applyDialogUtilsSetAttribute;
+		}
+
+		if (value == null) {
+			element.removeAttribute(name);
+		} else {
+			element.setAttribute(name, value);
+		}
+
+		if (record && record.beforeValue == record.afterValue) {
+			record.ignore = true;
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opTypePrefix + "::" + name);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
+
+	return true;
+}
+
+EvoEditor.addElementWithUndoRedo = function(opType, tagName, fillNodeFunc, parent, insertBefore, contentArray)
+{
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, parent, parent, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		var selectionUpdater = EvoSelection.CreateUpdaterObject(), node;
+
+		node = document.createElement(tagName);
+
+		if (fillNodeFunc)
+			fillNodeFunc(node);
+
+		parent.insertBefore(node, insertBefore);
+
+		if (contentArray) {
+			var ii;
+
+			for (ii = 0; ii < contentArray.length; ii++) {
+				node.append(contentArray[ii]);
+			}
+		}
+
+		selectionUpdater.restore();
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
+}
+
+EvoEditor.removeElementWithUndoRedo = function(opType, element)
+{
 	if (element) {
-		var record = EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DlgUtilSetAttribute::" + name, element, element, EvoEditor.CLAIM_CONTENT_FLAG_NONE);
-
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, element.parentElement, element.parentElement, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 		try {
-			if (record) {
-				record.path = EvoSelection.GetChildPath(document.body, element);
-				record.attrName = name;
-				record.beforeValue = element.hasAttribute(name) ? element.getAttribute(name) : null;
-				record.afterValue = value;
-				record.apply = EvoEditor.applyDialogUtilsSetAttribute;
+			var selectionUpdater = EvoSelection.CreateUpdaterObject(), firstChild;
+
+			firstChild = element.firstChild;
+
+			while (element.firstChild) {
+				element.parentElement.insertBefore(element.firstChild, element);
 			}
 
-			if (value != null) {
-				element.setAttribute(name, value);
-			} else {
-				element.removeAttribute(name);
-			}
+			selectionUpdater.beforeRemove(element);
+			element.parentElement.removeChild(element);
+			selectionUpdater.afterRemove(firstChild);
 
-			if (record && record.beforeValue == record.afterValue) {
-				record.ignore = true;
-			}
+			selectionUpdater.restore();
 		} finally {
-			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DlgUtilSetAttribute::" + name);
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType);
+			EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+			EvoEditor.EmitContentChanged();
 		}
 	}
 }
 
-EvoEditor.DialogUtilsGetAttribute = function(name)
+// 'value' can be 'null', to remove the attribute
+EvoEditor.DialogUtilsSetAttribute = function(selector, name, value)
 {
-	var element = document.getElementById("x-evo-dialog-current-element");
+	var element;
+
+	if (selector)
+		element = document.querySelector(selector);
+	else
+		element = document.getElementById("x-evo-dialog-current-element");
+
+	if (element) {
+		EvoEditor.setAttributeWithUndoRedo("DlgUtilSetAttribute", element, name, value);
+	}
+}
+
+EvoEditor.DialogUtilsGetAttribute = function(selector, name)
+{
+	var element;
+
+	if (selector)
+		element = document.querySelector(selector);
+	else
+		element = document.getElementById("x-evo-dialog-current-element");
 
 	if (element && element.hasAttribute(name))
 		return element.getAttribute(name);
@@ -2509,7 +2655,7 @@ EvoEditor.DialogUtilsHasAttribute = function(name)
 
 EvoEditor.LinkGetProperties = function()
 {
-	var res = null, anchor = EvoEditor.getCaretElement("A");
+	var res = null, anchor = EvoEditor.getParentElement("A", null, false);
 
 	if (anchor) {
 		res = [];
@@ -2534,7 +2680,7 @@ EvoEditor.LinkSetProperties = function(href, text)
 	// The properties dialog can discard selection, thus restore it before doing changes
 	EvoEditor.restorePropertiesSelection();
 
-	var anchor = EvoEditor.getCaretElement("A");
+	var anchor = EvoEditor.getParentElement("A", null, false);
 
 	if (anchor && (anchor.href != href || anchor.innerText != text)) {
 		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "SetLinkValues", anchor, anchor, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
@@ -2564,29 +2710,585 @@ EvoEditor.Unlink = function()
 	// The properties dialog can discard selection, thus restore it before doing changes
 	EvoEditor.restorePropertiesSelection();
 
-	var anchor = EvoEditor.getCaretElement("A");
+	var anchor = EvoEditor.getParentElement("A", null, false);
 
-	if (anchor) {
-		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "Unlink", anchor.parentElement, anchor.parentElement, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
-		try {
-			var selectionUpdater = EvoSelection.CreateUpdaterObject(), firstChild;
+	EvoEditor.removeElementWithUndoRedo("Unlink", anchor);
+}
 
-			firstChild = anchor.firstChild;
+EvoEditor.ReplaceImageSrc = function(selector, uri)
+{
+	if (!selector)
+		selector = "#x-evo-dialog-current-element";
 
-			while (anchor.firstChild) {
-				anchor.parentElement.insertBefore(anchor.firstChild, anchor);
+	var element = document.querySelector(selector);
+
+	if (element) {
+		if (uri) {
+			var attrName;
+
+			if (element.tagName == "IMG")
+				attrName = "src";
+			else
+				attrName = "background";
+
+			EvoEditor.setAttributeWithUndoRedo("ReplaceImageSrc", element, attrName, uri);
+		} else {
+			if (element.tagName == "IMG") {
+				EvoEditor.removeElementWithUndoRedo("ReplaceImageSrc", element);
+			} else {
+				EvoEditor.setAttributeWithUndoRedo("ReplaceImageSrc", element, "background", null);
+			}
+		}
+	}
+}
+
+EvoEditor.DialogUtilsSetImageUrl = function(href)
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (element && element.tagName == "IMG") {
+		var anchor = EvoEditor.getParentElement("A", element, true);
+
+		if (anchor) {
+			if (href && anchor.href != href) {
+				EvoEditor.setAttributeWithUndoRedo("DialogUtilsSetImageUrl", anchor, "href", href);
+			} else if (!href) {
+				EvoEditor.removeElementWithUndoRedo("DialogUtilsSetImageUrl::unset", element);
+			}
+		} else if (href) {
+			var fillHref = function(node) {
+				node.href = href;
+			};
+
+			EvoEditor.addElementWithUndoRedo("DialogUtilsSetImageUrl", "A", fillHref, element.parentElement, element, [ element ]);
+		}
+	}
+}
+
+EvoEditor.DialogUtilsGetImageUrl = function()
+{
+	var element = document.getElementById("x-evo-dialog-current-element"), res = null;
+
+	if (element && element.tagName == "IMG") {
+		var anchor = EvoEditor.getParentElement("A", element, true);
+
+		if (anchor)
+			res = anchor.href;
+	}
+
+	return res;
+}
+
+EvoEditor.DialogUtilsGetImageWidth = function(natural)
+{
+	var element = document.getElementById("x-evo-dialog-current-element"), res = -1;
+
+	if (element && element.tagName == "IMG") {
+		if (natural)
+			res = element.naturalWidth;
+		else
+			res = element.width;
+	}
+
+	return res;
+}
+
+EvoEditor.DialogUtilsGetImageHeight = function(natural)
+{
+	var element = document.getElementById("x-evo-dialog-current-element"), res = -1;
+
+	if (element && element.tagName == "IMG") {
+		if (natural)
+			res = element.naturalHeight;
+		else
+			res = element.height;
+	}
+
+	return res;
+}
+
+EvoEditor.dialogUtilsForeachTableScope = function(scope, traversar, opType)
+{
+	var cell = document.getElementById("x-evo-dialog-current-element");
+
+	if (!cell)
+		throw "EvoEditor.dialogUtilsForeachTableScope: Current cell not found";
+
+	cell.removeAttribute("id");
+
+	traversar.selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType);
+
+	cell.id = "x-evo-dialog-current-element";
+
+	try {
+		var rowFunc = function(row, traversar) {
+			var jj, length = row.cells.length;
+
+			for (jj = 0; jj < length; jj++) {
+				var cell = row.cells[length - jj - 1];
+
+				if (cell && !traversar.exec(cell))
+					return false;
 			}
 
-			selectionUpdater.beforeRemove(anchor);
-			anchor.parentElement.removeChild(anchor);
-			selectionUpdater.afterRemove(firstChild);
+			return true;
+		};
 
-			selectionUpdater.restore();
-		} finally {
-			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "Unlink");
-			EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
-			EvoEditor.EmitContentChanged();
+		if (scope == EvoEditor.E_CONTENT_EDITOR_SCOPE_CELL) {
+			traversar.exec(cell);
+		} else if (scope == EvoEditor.E_CONTENT_EDITOR_SCOPE_COLUMN) {
+			var table;
+
+			table = EvoEditor.getParentElement("TABLE", cell, true);
+			if (table) {
+				var length = table.rows.length, ii, cellIndex = cell.cellIndex;
+
+				for (ii = 0; ii < length; ii++) {
+					var row = table.rows[length - ii - 1];
+
+					if (row && cellIndex < row.cells.length &&
+					    !traversar.exec(row.cells[cellIndex]))
+						break;
+				}
+			}
+		} else if (scope == EvoEditor.E_CONTENT_EDITOR_SCOPE_ROW) {
+			var row = EvoEditor.getParentElement("TR", cell, true);
+
+			if (row)
+				rowFunc(row, traversar);
+		} else if (scope == EvoEditor.E_CONTENT_EDITOR_SCOPE_TABLE) {
+			var table = EvoEditor.getParentElement("TABLE", cell, true);
+
+			if (table) {
+				var length = table.rows.length, ii;
+
+				for (ii = 0; ii < length; ii++) {
+					if (!rowFunc(table.rows[length - ii - 1], traversar))
+						break;
+				}
+			}
 		}
+
+		traversar.selectionUpdater.restore();
+
+		cell = document.getElementById("x-evo-dialog-current-element");
+
+		if (cell)
+			cell.removeAttribute("id");
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, opType);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+
+		if (traversar.anyChanged)
+			EvoEditor.EmitContentChanged();
+
+		if (cell)
+			cell.id = "x-evo-dialog-current-element";
+	}
+
+	traversar.selectionUpdater = null;
+}
+
+EvoEditor.DialogUtilsTableSetAttribute = function(scope, attrName, attrValue)
+{
+	var traversar = {
+		attrName : attrName,
+		attrValue : attrValue,
+		anyChanged : false,
+
+		exec : function(cell) {
+			if (EvoEditor.setAttributeWithUndoRedo("", cell, this.attrName, this.attrValue))
+				this.anyChanged = true;
+
+			return true;
+		}
+	};
+
+	EvoEditor.dialogUtilsForeachTableScope(scope, traversar, "TableSetAttribute::" + attrName);
+}
+
+EvoEditor.DialogUtilsTableGetCellIsHeader = function()
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	return element && element.tagName == "TH";
+}
+
+EvoEditor.DialogUtilsTableSetHeader = function(scope, isHeader)
+{
+	var traversar = {
+		isHeader : isHeader,
+		selectionUpdater : null,
+		anyChanged : false,
+
+		exec : function(cell) {
+			if ((!this.isHeader && cell.tagName == "TD") ||
+			    (this.isHeader && cell.tagName == "TH"))
+				return;
+
+			this.anyChanged = true;
+
+			var opType = this.isHeader ? "unsetheader" : "setheader";
+
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, cell, cell,
+				EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+			try {
+				var node = document.createElement(this.isHeader ? "TH" : "TD");
+
+				while(cell.firstChild) {
+					node.append(cell.firstChild);
+				}
+
+				var ii;
+
+				for (ii = 0; ii < cell.attributes.length; ii++) {
+					node.setAttribute(cell.attributes[ii].name, cell.attributes[ii].value);
+				}
+
+				cell.parentElement.insertBefore(node, cell);
+
+				if (this.selectionUpdater)
+					this.selectionUpdater.beforeRemove(cell);
+
+				cell.parentElement.removeChild(cell);
+
+				if (this.selectionUpdater)
+					this.selectionUpdater.afterRemove(node);
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType);
+			}
+
+			return true;
+		}
+	};
+
+	EvoEditor.dialogUtilsForeachTableScope(scope, traversar, "DialogUtilsTableSetHeader");
+}
+
+EvoEditor.DialogUtilsTableGetRowCount = function()
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (!element)
+		return 0;
+
+	element = EvoEditor.getParentElement("TABLE", element, true);
+
+	if (!element)
+		return 0;
+
+	return element.rows.length;
+}
+
+EvoEditor.DialogUtilsTableSetRowCount = function(rowCount)
+{
+	var currentElem = document.getElementById("x-evo-dialog-current-element");
+
+	if (!currentElem)
+		return;
+
+	var table = EvoEditor.getParentElement("TABLE", currentElem, true);
+
+	if (!table || table.rows.length == rowCount)
+		return;
+
+	var selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	currentElem.removeAttribute("id");
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DialogUtilsTableSetRowCount", table, table, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+	currentElem.id = "x-evo-dialog-current-element";
+
+	try {
+		var ii;
+
+		if (table.rows.length < rowCount) {
+			var jj, nCells = table.rows.length ? table.rows[0].cells.length : 1;
+
+			for (ii = table.rows.length; ii < rowCount; ii++) {
+				var row;
+
+				row = table.insertRow(-1);
+
+				for (jj = 0; jj < nCells; jj++) {
+					row.insertCell(-1);
+				}
+			}
+		} else if (table.rows.length > rowCount) {
+			for (ii = table.rows.length; ii > rowCount; ii--) {
+				table.deleteRow(ii - 1);
+			}
+		}
+
+		try {
+			// it can fail, due to removed rows
+			selectionUpdater.restore();
+		} catch (ex) {
+		}
+
+		currentElem = document.getElementById("x-evo-dialog-current-element");
+		if (!currentElem && table.rows.length > 0) {
+			currentElem = table.rows[0].cells.length > 0 ? table.rows[0].cells[0] : null;
+		}
+
+		if (currentElem)
+			currentElem.removeAttribute("id");
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DialogUtilsTableSetRowCount");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+
+		if (currentElem)
+			currentElem.id = "x-evo-dialog-current-element";
+	}
+}
+
+EvoEditor.DialogUtilsTableGetColumnCount = function()
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (!element)
+		return 0;
+
+	element = EvoEditor.getParentElement("TABLE", element, true);
+
+	if (!element || !element.rows.length)
+		return 0;
+
+	return element.rows[0].cells.length;
+}
+
+EvoEditor.DialogUtilsTableSetColumnCount = function(columnCount)
+{
+	var currentElem = document.getElementById("x-evo-dialog-current-element");
+
+	if (!currentElem)
+		return;
+
+	var table = EvoEditor.getParentElement("TABLE", currentElem, true);
+
+	if (!table || !table.rows.length || table.rows[0].cells.length == columnCount)
+		return;
+
+	var selectionUpdater = EvoSelection.CreateUpdaterObject();
+
+	currentElem.removeAttribute("id");
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DialogUtilsTableSetColumnCount", table, table, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+	currentElem.id = "x-evo-dialog-current-element";
+
+	try {
+		var ii, jj;
+
+		for (jj = 0; jj < table.rows.length; jj++) {
+			var row = table.rows[jj];
+
+			if (row.cells.length < columnCount) {
+				for (ii = row.cells.length; ii < columnCount; ii++) {
+					row.insertCell(-1);
+				}
+			} else if (row.cells.length > columnCount) {
+				for (ii = row.cells.length; ii > columnCount; ii--) {
+					row.deleteCell(ii - 1);
+				}
+			}
+		}
+
+		try {
+			// it can fail, due to removed columns
+			selectionUpdater.restore();
+		} catch (ex) {
+		}
+
+		currentElem = document.getElementById("x-evo-dialog-current-element");
+		if (!currentElem && table.rows.length > 0) {
+			currentElem = table.rows[0].cells.length > 0 ? table.rows[0].cells[0] : null;
+		}
+
+		if (currentElem)
+			currentElem.removeAttribute("id");
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "DialogUtilsTableSetColumnCount");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+
+		if (currentElem)
+			currentElem.id = "x-evo-dialog-current-element";
+	}
+}
+
+EvoEditor.DialogUtilsTableDeleteCellContent = function()
+{
+	var traversar = {
+		anyChanged : false,
+
+		exec : function(cell) {
+			if (cell.firstChild) {
+				this.anyChanged = true;
+
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeletecellcontent", cell, cell, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+				try {
+					while (cell.firstChild) {
+						if (this.selectionUpdater)
+							this.selectionUpdater.beforeRemove(cell.firstChild);
+
+						cell.removeChild(cell.firstChild);
+
+						if (this.selectionUpdater)
+							this.selectionUpdater.afterRemove(cell);
+					}
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeletecellcontent");
+				}
+			}
+
+			return true;
+		}
+	};
+
+	EvoEditor.dialogUtilsForeachTableScope(EvoEditor.E_CONTENT_EDITOR_SCOPE_CELL, traversar, "TableDeleteCellContent");
+}
+
+EvoEditor.DialogUtilsTableDeleteColumn = function()
+{
+	var traversar = {
+		anyChanged : false,
+
+		exec : function(cell) {
+			this.anyChanged = true;
+
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeletecolumn", cell, cell,
+				EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+			try {
+				if (this.selectionUpdater) {
+					this.selectionUpdater.beforeRemove(cell);
+					this.selectionUpdater.afterRemove(cell.nextElementSibling ? cell.nextElementSibling : cell.previousElementSibling);
+				}
+
+				cell.parentElement.removeChild(cell);
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeletecolumn");
+			}
+
+			return true;
+		}
+	};
+
+	EvoEditor.dialogUtilsForeachTableScope(EvoEditor.E_CONTENT_EDITOR_SCOPE_COLUMN, traversar, "TableDeleteColumn");
+}
+
+EvoEditor.DialogUtilsTableDeleteRow = function()
+{
+	var traversar = {
+		anyChanged : false,
+
+		exec : function(cell) {
+			this.anyChanged = true;
+
+			var row = cell.parentElement;
+
+			if (!row)
+				return false;
+
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeleterow", row, row,
+				EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+			try {
+				row.parentElement.deleteRow(row.rowIndex);
+				// TODO handle changed selection and "x-evo-dialog-current-element"
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "subdeleterow");
+			}
+
+			return false;
+		}
+	};
+
+	EvoEditor.dialogUtilsForeachTableScope(EvoEditor.E_CONTENT_EDITOR_SCOPE_ROW, traversar, "TableDeleteColumn");
+}
+
+EvoEditor.DialogUtilsTableDelete = function()
+{
+	var element = document.getElementById("x-evo-dialog-current-element");
+
+	if (!element)
+		return;
+
+	element = EvoEditor.getParentElement("TABLE", element, true);
+
+	if (!element)
+		return;
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "TableDelete", element, element,
+		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		element.parentElement.removeChild(element);
+		// TODO handle changed selection and "x-evo-dialog-current-element"
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "TableDelete");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
+}
+
+// 'what' can be "column" or "row",
+// 'where' can be lower than 0 for before/above, higher than 0 for after/below
+EvoEditor.DialogUtilsTableInsert = function(what, where)
+{
+	if (what != "column" && what != "row")
+		throw "EvoEditor.DialogUtilsTableInsert: 'what' (" + what + ") can be only 'column' or 'row'";
+	if (!where)
+		throw "EvoEditor.DialogUtilsTableInsert: 'where' cannot be zero";
+
+	var cell, table;
+
+	cell = document.getElementById("x-evo-dialog-current-element");
+
+	if (!cell)
+		return;
+
+	table = EvoEditor.getParentElement("TABLE", cell, true);
+
+	if (!table)
+		return;
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "TableInsert::" + what, table, table,
+		EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		var index, ii;
+
+		if (what == "column") {
+			index = cell.cellIndex;
+
+			if (where > 0)
+				index++;
+
+			for (ii = 0; ii < table.rows.length; ii++) {
+				table.rows[ii].insertCell(index <= table.rows[ii].cells.length ? index : -1);
+			}
+		} else { // what == "row"
+			var row = EvoEditor.getParentElement("TR", cell, true);
+
+			if (row) {
+				index = row.rowIndex;
+
+				if (where > 0)
+					index++;
+
+				row = table.insertRow(index <= table.rows.length ? index : -1);
+
+				for (ii = 0; ii < table.rows[0].cells.length; ii++) {
+					row.insertCell(-1);
+				}
+			}
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "TableInsert::" + what);
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
 	}
 }
 
@@ -2619,7 +3321,7 @@ EvoEditor.onContextMenu = function(event)
 
 	var nodeFlags = EvoEditor.E_CONTENT_EDITOR_NODE_UNKNOWN, res;
 
-	while (node) {
+	while (node && node.tagName != "BODY") {
 		if (node.tagName == "A")
 			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_ANCHOR;
 		else if (node.tagName == "HR")
@@ -2629,7 +3331,7 @@ EvoEditor.onContextMenu = function(event)
 		else if (node.tagName == "TABLE")
 			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TABLE;
 		else if (node.tagName == "TD" || node.tagName == "TH")
-			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_CELL;
+			nodeFlags |= EvoEditor.E_CONTENT_EDITOR_NODE_IS_TABLE_CELL;
 
 		node = node.parentElement;
 	}
