@@ -761,27 +761,32 @@ EvoUndoRedo.GroupTopRecords = function(nRecords, opType)
 */
 EvoUndoRedo.BackupChildrenBefore = function(record, parent, firstChildIndex, lastChildIndex)
 {
-	record.firstChildIndex = firstChildIndex;
+	var currentElemsArray = EvoEditor.RemoveCurrentElementAttr();
 
-	if (firstChildIndex == -1) {
-		record.htmlBefore = parent.innerHTML;
-		return;
-	}
+	try {
+		record.firstChildIndex = firstChildIndex;
 
-	record.htmlBefore = "";
+		if (firstChildIndex == -1) {
+			record.htmlBefore = parent.innerHTML;
+		} else {
+			record.htmlBefore = "";
 
-	var ii;
+			var ii;
 
-	for (ii = firstChildIndex; ii < parent.children.length; ii++) {
-		record.htmlBefore += parent.children[ii].outerHTML;
+			for (ii = firstChildIndex; ii < parent.children.length; ii++) {
+				record.htmlBefore += parent.children[ii].outerHTML;
 
-		if (ii == lastChildIndex) {
-			ii++;
-			break;
+				if (ii == lastChildIndex) {
+					ii++;
+					break;
+				}
+			}
+
+			record.restChildrenCount = parent.children.length - ii;
 		}
+	} finally {
+		EvoEditor.RestoreCurrentElementAttr(currentElemsArray);
 	}
-
-	record.restChildrenCount = parent.children.length - ii;
 }
 
 EvoUndoRedo.BackupChildrenAfter = function(record, parent)
@@ -793,32 +798,37 @@ EvoUndoRedo.BackupChildrenAfter = function(record, parent)
 	if (record.htmlBefore == undefined)
 		throw "EvoUndoRedo.BackupChildrenAfter: 'record' doesn't contain 'htmlBefore' property";
 
-	if (record.firstChildIndex == -1) {
-		record.htmlAfter = parent.innerHTML;
-		return;
-	}
+	var currentElemsArray = EvoEditor.RemoveCurrentElementAttr();
 
-	record.htmlAfter = "";
+	try {
+		if (record.firstChildIndex == -1) {
+			record.htmlAfter = parent.innerHTML;
+		} else {
+			record.htmlAfter = "";
 
-	var ii, first, last;
+			var ii, first, last;
 
-	first = record.firstChildIndex;
+			first = record.firstChildIndex;
 
-	// it can equal to the children.length, when the node had been removed
-	if (first < 0 || first > parent.children.length) {
-		throw "EvoUndoRedo.BackupChildrenAfter: firstChildIndex (" + first + ") out of bounds (" + parent.children.length + ")";
-	}
+			// it can equal to the children.length, when the node had been removed
+			if (first < 0 || first > parent.children.length) {
+				throw "EvoUndoRedo.BackupChildrenAfter: firstChildIndex (" + first + ") out of bounds (" + parent.children.length + ")";
+			}
 
-	last = parent.children.length - record.restChildrenCount;
-	if (last < 0 || last < first) {
-		throw "EvoUndoRedo::BackupChildrenAfter: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
-			parent.children.length + " first:" + first + " last:" + last + ")";
-	}
+			last = parent.children.length - record.restChildrenCount;
+			if (last < 0 || last < first) {
+				throw "EvoUndoRedo::BackupChildrenAfter: restChildrenCount (" + record.restChildrenCount + ") out of bounds (length:" +
+					parent.children.length + " first:" + first + " last:" + last + ")";
+			}
 
-	for (ii = first; ii < last; ii++) {
-		if (ii >= 0 && ii < parent.children.length) {
-			record.htmlAfter += parent.children[ii].outerHTML;
+			for (ii = first; ii < last; ii++) {
+				if (ii >= 0 && ii < parent.children.length) {
+					record.htmlAfter += parent.children[ii].outerHTML;
+				}
+			}
 		}
+	} finally {
+		EvoEditor.RestoreCurrentElementAttr(currentElemsArray);
 	}
 }
 
