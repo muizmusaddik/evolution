@@ -2222,14 +2222,19 @@ EvoEditor.UpdateThemeStyleSheet = function(css)
 EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 {
 	var isInsertParagraph = inputEvent.inputType == "insertParagraph";
+	var selection = document.getSelection();
+
+	if (isInsertParagraph && selection.isCollapsed && selection.baseNode && selection.baseNode.tagName == "BODY") {
+		document.execCommand("insertHTML", false, "<div><br></div>");
+		EvoUndoRedo.GroupTopRecords(2, "insertParagraph::withFormat");
+		return;
+	}
 
 	if ((!isInsertParagraph && inputEvent.inputType != "insertText") ||
 	    (!(EvoEditor.MAGIC_LINKS && (isWordDelim || isInsertParagraph)) &&
 	    !EvoEditor.MAGIC_SMILEYS)) {
 		return;
 	}
-
-	var selection = document.getSelection();
 
 	if (!selection.isCollapsed || !selection.baseNode)
 		return;

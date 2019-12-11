@@ -3413,8 +3413,8 @@ test_h_rule_insert (TestFixture *fixture)
 		"type:text\n"
 		"action:insert-rule\n"
 		"seq:^\n",  /* Escape key press to close the dialog */
-		HTML_PREFIX "<div>text</div><hr align=\"left\" size=\"2\" noshade=\"\">" HTML_SUFFIX,
-		"text"))
+		HTML_PREFIX "<div>text</div><hr align=\"center\">" HTML_SUFFIX,
+		"text\n\n"))
 		g_test_fail ();
 }
 
@@ -3428,8 +3428,10 @@ test_h_rule_insert_text_after (TestFixture *fixture)
 		"seq:tttttn\n" /* Move to the Close button and press it */
 		"seq:drn\n" /* Press the right key instead of End key as the End key won't move caret after the HR element */
 		"type:below\n",
-		HTML_PREFIX "<div>above</div><hr align=\"left\" size=\"2\" noshade=\"\"><div>below</div>" HTML_SUFFIX,
-		"above\nbelow"))
+		HTML_PREFIX "<div>above</div><hr align=\"center\"><div>below</div>" HTML_SUFFIX,
+		"above\n"
+		"\n"
+		"below\n"))
 		g_test_fail ();
 }
 
