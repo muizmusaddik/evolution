@@ -717,6 +717,9 @@ EvoUndoRedo.Clear = function()
 
 EvoUndoRedo.GroupTopRecords = function(nRecords, opType)
 {
+	if (EvoUndoRedo.disabled)
+		return;
+
 	if (EvoUndoRedo.ongoingRecordings.length)
 		throw "EvoUndoRedo.GroupTopRecords: Cannot be called when there are ongoing recordings";
 
