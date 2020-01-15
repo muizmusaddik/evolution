@@ -23,6 +23,7 @@ macro(add_webextension_editor_module _name _sourcesvar _depsvar _defsvar _cflags
 endmacro(add_webextension_editor_module)
 
 set(extra_deps
+	evolution-util
 	evolution-mail
 )
 set(sources
@@ -35,9 +36,15 @@ set(extra_defines
 	-DEVOLUTION_SOURCE_WEBKITDATADIR=\"${CMAKE_SOURCE_DIR}/data/webkit\"
 )
 
-set(extra_cflags)
-set(extra_incdirs)
-set(extra_ldflags)
+set(extra_cflags
+	${EVOLUTION_DATA_SERVER_CFLAGS}
+)
+set(extra_incdirs
+	${EVOLUTION_DATA_SERVER_INCLUDE_DIRS}
+)
+set(extra_ldflags
+	${EVOLUTION_DATA_SERVER_LDFLAGS}
+)
 
 add_webextension_editor_module(module-webkit-editor-webextension
 	sources

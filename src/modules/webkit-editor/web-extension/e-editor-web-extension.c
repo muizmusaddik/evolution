@@ -20,10 +20,17 @@
 
 #include <webkit2/webkit-web-extension.h>
 
+#include <libedataserver/libedataserver.h>
+
+#define E_UTIL_INCLUDE_WITHOUT_WEBKIT 1
+#include "e-util/e-util.h"
+#undef E_UTIL_INCLUDE_WITHOUT_WEBKIT
+
 #include "e-editor-web-extension.h"
 
 struct _EEditorWebExtensionPrivate {
 	WebKitWebExtension *wk_extension;
+	ESpellChecker *spell_checker;
 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (EEditorWebExtension, e_editor_web_extension, G_TYPE_OBJECT)
@@ -34,6 +41,7 @@ e_editor_web_extension_dispose (GObject *object)
 	EEditorWebExtension *extension = E_EDITOR_WEB_EXTENSION (object);
 
 	g_clear_object (&extension->priv->wk_extension);
+	g_clear_object (&extension->priv->spell_checker);
 
 	/* Chain up to parent's dispose() method. */
 	G_OBJECT_CLASS (e_editor_web_extension_parent_class)->dispose (object);
@@ -51,6 +59,7 @@ static void
 e_editor_web_extension_init (EEditorWebExtension *extension)
 {
 	extension->priv = e_editor_web_extension_get_instance_private (extension);
+	extension->priv->spell_checker = e_spell_checker_new ();
 }
 
 static gpointer
@@ -207,13 +216,64 @@ evo_editor_jsc_find_pattern (const gchar *text,
 }
 
 static void
+evo_editor_jsc_set_spell_check_languages (const gchar *langs,
+					  GWeakRef *wkrf_extension)
+{
+	EEditorWebExtension *extension;
+	gchar **strv;
+
+	g_return_if_fail (wkrf_extension != NULL);
+
+	extension = g_weak_ref_get (wkrf_extension);
+
+	if (!extension)
+		return;
+
+	if (langs && *langs)
+		strv = g_strsplit (langs, "|", -1);
+	else
+		strv = NULL;
+
+	e_spell_checker_set_active_languages (extension->priv->spell_checker, (const gchar * const *) strv);
+
+	g_object_unref (extension);
+	g_strfreev (strv);
+}
+
+/* Returns whether the 'word' is a properly spelled word. It checks
+   with languages previously set by EvoEditor.SetSpellCheckLanguages(). */
+static gboolean
+evo_editor_jsc_spell_check_word (const gchar *word,
+				 GWeakRef *wkrf_extension)
+{
+	EEditorWebExtension *extension;
+	gboolean is_correct;
+
+	g_return_val_if_fail (wkrf_extension != NULL, FALSE);
+
+	extension = g_weak_ref_get (wkrf_extension);
+
+	if (!extension)
+		return TRUE;
+
+	is_correct = e_spell_checker_check_word (extension->priv->spell_checker, word, -1);
+
+	g_object_unref (extension);
+
+	return is_correct;
+}
+
+static void
 window_object_cleared_cb (WebKitScriptWorld *world,
 			  WebKitWebPage *page,
 			  WebKitFrame *frame,
 			  gpointer user_data)
 {
+	EEditorWebExtension *extension = user_data;
 	JSCContext *jsc_context;
 	JSCValue *jsc_editor;
+
+	g_return_if_fail (E_IS_EDITOR_WEB_EXTENSION (extension));
 
 	/* Load the javascript files only to the main frame, not to the subframes */
 	if (!webkit_frame_is_main_frame (frame))
@@ -231,12 +291,35 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 
 	if (jsc_editor) {
 		JSCValue *jsc_function;
+		const gchar *func_name;
 
-		jsc_function = jsc_value_new_function (jsc_context, "findPattern",
+		/* EvoEditor.findPattern(text, pattern) */
+		func_name = "findPattern";
+		jsc_function = jsc_value_new_function (jsc_context, func_name,
 			G_CALLBACK (evo_editor_jsc_find_pattern), g_object_ref (jsc_context), g_object_unref,
 			JSC_TYPE_VALUE, 2, G_TYPE_STRING, G_TYPE_STRING);
 
-		jsc_value_object_set_property (jsc_editor, "findPattern", jsc_function);
+		jsc_value_object_set_property (jsc_editor, func_name, jsc_function);
+
+		g_clear_object (&jsc_function);
+
+		/* EvoEditor.SetSpellCheckLanguages(langs) */
+		func_name = "SetSpellCheckLanguages";
+		jsc_function = jsc_value_new_function (jsc_context, func_name,
+			G_CALLBACK (evo_editor_jsc_set_spell_check_languages), e_weak_ref_new (extension), (GDestroyNotify) e_weak_ref_free,
+			G_TYPE_NONE, 1, G_TYPE_STRING);
+
+		jsc_value_object_set_property (jsc_editor, func_name, jsc_function);
+
+		g_clear_object (&jsc_function);
+
+		/* EvoEditor.SpellCheckWord(word) */
+		func_name = "SpellCheckWord";
+		jsc_function = jsc_value_new_function (jsc_context, func_name,
+			G_CALLBACK (evo_editor_jsc_spell_check_word), e_weak_ref_new (extension), (GDestroyNotify) e_weak_ref_free,
+			G_TYPE_BOOLEAN, 1, G_TYPE_STRING);
+
+		jsc_value_object_set_property (jsc_editor, func_name, jsc_function);
 
 		g_clear_object (&jsc_function);
 		g_clear_object (&jsc_editor);
@@ -251,7 +334,7 @@ web_page_document_loaded_cb (WebKitWebPage *web_page,
 {
 	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
 
-	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), NULL);
+	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), user_data);
 }
 
 static void
@@ -262,7 +345,7 @@ web_page_created_cb (WebKitWebExtension *wk_extension,
 	g_return_if_fail (WEBKIT_IS_WEB_PAGE (web_page));
 	g_return_if_fail (E_IS_EDITOR_WEB_EXTENSION (extension));
 
-	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), NULL);
+	window_object_cleared_cb (NULL, web_page, webkit_web_page_get_main_frame (web_page), extension);
 
 	g_signal_connect (
 		web_page, "send-request",
@@ -270,7 +353,7 @@ web_page_created_cb (WebKitWebExtension *wk_extension,
 
 	g_signal_connect (
 		web_page, "document-loaded",
-		G_CALLBACK (web_page_document_loaded_cb), NULL);
+		G_CALLBACK (web_page_document_loaded_cb), extension);
 }
 
 void
@@ -290,5 +373,5 @@ e_editor_web_extension_initialize (EEditorWebExtension *extension,
 	script_world = webkit_script_world_get_default ();
 
 	g_signal_connect (script_world, "window-object-cleared",
-		G_CALLBACK (window_object_cleared_cb), NULL);
+		G_CALLBACK (window_object_cleared_cb), extension);
 }

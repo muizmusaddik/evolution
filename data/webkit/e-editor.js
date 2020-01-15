@@ -3336,6 +3336,86 @@ EvoEditor.GetCaretWord = function()
 	return range.toString();
 }
 
+EvoEditor.SpellCheckContinue = function(fromCaret, directionNext)
+{
+	var selection, storedSelection = null;
+
+	selection = document.getSelection();
+
+	if (fromCaret) {
+		storedSelection = EvoSelection.Store(document);
+	} else {
+		if (directionNext) {
+			selection.modify("move", "left", "documentboundary");
+		} else {
+			selection.modify ("move", "right", "documentboundary");
+			selection.modify ("extend", "backward", "word");
+		}
+	}
+
+	var selectWord = function(selection, directionNext) {
+		var anchorNode, anchorOffset;
+
+		anchorNode = selection.anchorNode;
+		anchorOffset = selection.anchorOffset;
+
+		if (directionNext) {
+			var focusNode, focusOffset;
+
+			focusNode = selection.focusNode;
+			focusOffset = selection.focusOffset;
+
+			/* Jump _behind_ next word */
+			selection.modify("move", "forward", "word");
+			/* Jump before the word */
+			selection.modify("move", "backward", "word");
+			/* Select it */
+			selection.modify("extend", "forward", "word");
+
+			/* If the selection didn't change, then we have most probably reached the end of the document. */
+			return !((anchorNode === selection.anchorNode) &&
+				 (anchorOffset == selection.anchorOffset) &&
+				 (focusNode === selection.focusNode) &&
+				 (focusOffset == selection.focusOffset));
+		} else {
+			/* Jump on the beginning of current word */
+			selection.modify("move", "backward", "word");
+			/* Jump before previous word */
+			selection.modify("move", "backward", "word");
+			/* Select it */
+			selection.modify("extend", "forward", "word");
+
+			/* If the selection start didn't change, then we have most probably reached the beginning of the document. */
+			return (!(anchorNode === selection.anchorNode)) ||
+				(anchorOffset != selection.anchorOffset);
+		}
+	};
+
+	while (selectWord(selection, directionNext)) {
+		if (selection.rangeCount < 1)
+			break;
+
+		var range = selection.getRangeAt(0);
+
+		if (!range)
+			break;
+
+		var word = range.toString();
+
+		if (!EvoEditor.SpellCheckWord(word)) {
+			/* Found misspelled word */
+			return word;
+		}
+	}
+
+	/* Restore the selection to contain the last misspelled word. This is
+	 * reached only when we reach the beginning/end of the document */
+	if (storedSelection)
+		EvoSelection.Restore(document, storedSelection);
+
+	return null;
+}
+
 EvoEditor.onContextMenu = function(event)
 {
 	var node = event.target;

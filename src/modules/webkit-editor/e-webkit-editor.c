@@ -3072,6 +3072,43 @@ webkit_editor_on_dialog_open (EContentEditor *editor,
 
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 		"EvoEditor.OnDialogOpen(%s);", name);
+
+	if (g_strcmp0 (name, E_CONTENT_EDITOR_DIALOG_SPELLCHECK) == 0) {
+		gchar **strv;
+
+		strv = e_spell_checker_list_active_languages (wk_editor->priv->spell_checker, NULL);
+
+		if (strv) {
+			gint ii, len = 0;
+			gchar *langs, *ptr;
+
+			for (ii = 0; strv[ii]; ii++) {
+				len += strlen (strv[ii]) + 1;
+			}
+
+			len++;
+
+			langs = g_slice_alloc0 (len);
+			ptr = langs;
+
+			for (ii = 0; strv[ii]; ii++) {
+				strcpy (ptr, strv[ii]);
+				ptr += strlen (strv[ii]);
+				if (strv[ii + 1]) {
+					*ptr = '|';
+					ptr++;
+				}
+			}
+
+			*ptr = '\0';
+
+			e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+				"EvoEditor.SetSpellCheckLanguages(%s);", langs);
+
+			g_slice_free1 (len, langs);
+			g_strfreev (strv);
+		}
+	}
 }
 
 static void
@@ -3961,56 +3998,21 @@ webkit_editor_table_set_background_image_uri (EContentEditor *editor,
 }
 
 static gchar *
-move_to_another_word (EContentEditor *editor,
-                      const gchar *word,
-                      const gchar *dom_function)
-{
-	EWebKitEditor *wk_editor;
-	gchar **active_languages;
-	gchar *another_word = NULL;
-	GVariant *result;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return NULL;
-	}
-
-	active_languages = e_spell_checker_list_active_languages (
-		wk_editor->priv->spell_checker, NULL);
-	if (!active_languages)
-		return NULL;
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		dom_function,
-		g_variant_new (
-			"(ts^as)", current_page_id (wk_editor), word ? word : "", active_languages),
-		NULL);
-
-	g_strfreev (active_languages);
-
-	if (result) {
-		g_variant_get (result, "(s)", &another_word);
-		g_variant_unref (result);
-	}
-
-	return another_word;
-}
-
-static gchar *
 webkit_editor_spell_check_next_word (EContentEditor *editor,
                                      const gchar *word)
 {
-	return move_to_another_word (editor, word, "EEditorSpellCheckDialogNext");
+	return webkit_editor_extract_and_free_jsc_string (
+		webkit_editor_call_jsc_sync (E_WEBKIT_EDITOR (editor), "EvoEditor.SpellCheckContinue(%x,%x);", word && *word, TRUE),
+		NULL);
 }
 
 static gchar *
 webkit_editor_spell_check_prev_word (EContentEditor *editor,
                                      const gchar *word)
 {
-	return move_to_another_word (editor, word, "EEditorSpellCheckDialogPrev");
+	return webkit_editor_extract_and_free_jsc_string (
+		webkit_editor_call_jsc_sync (E_WEBKIT_EDITOR (editor), "EvoEditor.SpellCheckContinue(%x,%x);", word && *word, FALSE),
+		NULL);
 }
 
 static void
