@@ -456,7 +456,7 @@ EvoUndoRedo.inputCb = function(inputEvent)
 
 	if (EvoUndoRedo.disabled) {
 		EvoEditor.EmitContentChanged();
-		EvoEditor.MaybeReplaceTextAfterInput(inputEvent, isWordDelim);
+		EvoEditor.AfterInputEvent(inputEvent, isWordDelim);
 		return;
 	}
 
@@ -588,6 +588,11 @@ EvoUndoRedo.StopRecord = function(kind, opType)
 	}
 
 	if (!EvoUndoRedo.ongoingRecordings.length) {
+		// Workaround WebKitGTK+ bug not sending beforeInput event when deleting with backspace
+		// https://bugs.webkit.org/show_bug.cgi?id=206341
+		if (opType == "deleteContentBackward")
+			return false;
+
 		throw "EvoUndoRedo:StopRecord: Nothing is recorded for kind:" + kind + " opType:'" + opType + "'";
 	}
 
