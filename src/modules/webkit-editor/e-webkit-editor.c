@@ -1376,13 +1376,21 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"  font-family: Monospace; \n"
 		"}\n");
 
-	g_string_append (
-		stylesheet,
-		"body[data-evo-plain-text] img.-x-evo-smiley-img, "
-		"body:not([data-evo-plain-text]) span.-x-evo-smiley-text "
-		"{\n"
-		"  display: none \n"
-		"}\n");
+	if (wk_editor->priv->html_mode) {
+		g_string_append (
+			stylesheet,
+			"span.-x-evo-smiley-text"
+			"{\n"
+			"  display: none \n"
+			"}\n");
+	} else {
+		g_string_append (
+			stylesheet,
+			"img.-x-evo-smiley-img"
+			"{\n"
+			"  display: none \n"
+			"}\n");
+	}
 
 	g_string_append (
 		stylesheet,
@@ -2382,28 +2390,19 @@ webkit_editor_redo (EContentEditor *editor)
 
 static void
 webkit_editor_move_caret_on_coordinates (EContentEditor *editor,
-                                         gint x,
-                                         gint y,
-                                         gboolean cancel_if_not_collapsed)
+					 gint xx,
+					 gint yy,
+					 gboolean cancel_if_not_collapsed)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMMoveSelectionOnPoint",
-		g_variant_new (
-			"(tiib)", current_page_id (wk_editor), x, y, cancel_if_not_collapsed),
-		NULL);
-
-	if (result)
-		g_variant_unref (result);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.MoveSelectionToPoint(%d, %d, %x);",
+		xx, yy, cancel_if_not_collapsed);
 }
 
 static void
@@ -2411,19 +2410,30 @@ webkit_editor_insert_emoticon (EContentEditor *editor,
                                EEmoticon *emoticon)
 {
 	EWebKitEditor *wk_editor;
+	GSettings *settings;
+	const gchar *text;
+	gchar *image_uri = NULL;
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+	g_return_if_fail  (emoticon != NULL);
+
+	settings = e_util_ref_settings ("org.gnome.evolution.mail");
+
+	if (g_settings_get_boolean (settings, "composer-unicode-smileys")) {
+		text = emoticon->unicode_character;
+	} else {
+		text = emoticon->text_face;
+		image_uri = e_emoticon_get_uri (emoticon);
 	}
 
-	e_util_invoke_g_dbus_proxy_call_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMInsertSmiley",
-		g_variant_new (
-			"(ts)", current_page_id (wk_editor), e_emoticon_get_name (emoticon)),
-		wk_editor->priv->cancellable);
+	wk_editor = E_WEBKIT_EDITOR (editor);
+
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.InsertEmoticon(%s, %s);",
+		text, image_uri);
+
+	g_clear_object (&settings);
+	g_free (image_uri);
 }
 
 static void
@@ -4238,6 +4248,11 @@ webkit_editor_constructed (GObject *object)
 	webkit_web_context_register_uri_scheme (web_context, "evo-http", webkit_editor_process_uri_request_cb,
 		g_object_ref (content_request), g_object_unref);
 	webkit_web_context_register_uri_scheme (web_context, "evo-https", webkit_editor_process_uri_request_cb,
+		g_object_ref (content_request), g_object_unref);
+	g_object_unref (content_request);
+
+	content_request = e_file_request_new ();
+	webkit_web_context_register_uri_scheme (web_context, "evo-file", webkit_editor_process_uri_request_cb,
 		g_object_ref (content_request), g_object_unref);
 	g_object_unref (content_request);
 

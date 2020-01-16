@@ -59,7 +59,7 @@ static void
 e_editor_web_extension_init (EEditorWebExtension *extension)
 {
 	extension->priv = e_editor_web_extension_get_instance_private (extension);
-	extension->priv->spell_checker = e_spell_checker_new ();
+	extension->priv->spell_checker = NULL;
 }
 
 static gpointer
@@ -234,6 +234,9 @@ evo_editor_jsc_set_spell_check_languages (const gchar *langs,
 	else
 		strv = NULL;
 
+	if (!extension->priv->spell_checker)
+		extension->priv->spell_checker = e_spell_checker_new ();
+
 	e_spell_checker_set_active_languages (extension->priv->spell_checker, (const gchar * const *) strv);
 
 	g_object_unref (extension);
@@ -255,6 +258,12 @@ evo_editor_jsc_spell_check_word (const gchar *word,
 
 	if (!extension)
 		return TRUE;
+
+	/* It should be created as part of EvoEditor.SetSpellCheckLanguages(). */
+	g_warn_if_fail (extension->priv->spell_checker != NULL);
+
+	if (!extension->priv->spell_checker)
+		extension->priv->spell_checker = e_spell_checker_new ();
 
 	is_correct = e_spell_checker_check_word (extension->priv->spell_checker, word, -1);
 

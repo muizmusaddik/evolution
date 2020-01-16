@@ -3416,6 +3416,33 @@ EvoEditor.SpellCheckContinue = function(fromCaret, directionNext)
 	return null;
 }
 
+EvoEditor.MoveSelectionToPoint = function(xx, yy, cancel_if_not_collapsed)
+{
+	if (!cancel_if_not_collapsed || document.getSelection().isCollapsed) {
+		var range = document.caretRangeFromPoint(xx, yy);
+
+		document.getSelection().removeAllRanges();
+		document.getSelection().addRange(range);
+	}
+}
+
+EvoEditor.InsertEmoticon = function(text, imageUri)
+{
+	if (imageUri) {
+		EvoEditor.InsertHTML("InsertEmoticon",
+			"<span class=\"-x-evo-smiley-wrapper\">" +
+			"<img class=\"-x-evo-smiley-img\" src=\"" + imageUri + "\" alt=\"" +
+				text.replace(/\&/g, "&amp;").replace(/\"/g, "&quot;").replace(/\'/g, "&apos;") +
+			"\">" +
+			"<span class=\"-x-evo-smiley-text\">" +
+				text.replace(/\&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") +
+			"</span>" +
+			"</span>&#x200b;");
+	} else {
+		EvoEditor.InsertHTML("InsertEmoticon", text);
+	}
+}
+
 EvoEditor.onContextMenu = function(event)
 {
 	var node = event.target;
