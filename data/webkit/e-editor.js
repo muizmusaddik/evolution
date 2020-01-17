@@ -1632,6 +1632,9 @@ EvoEditor.beforeInputCb = function(inputEvent)
 
 EvoEditor.initializeContent = function()
 {
+	// for backward compatibility
+	document.execCommand("StyleWithCSS", false, "false");
+
 	if (document.body) {
 		// attach on body, thus it runs before EvoUndoRedo.beforeInputCb()
 		document.body.onbeforeinput = EvoEditor.beforeInputCb;
@@ -1645,7 +1648,7 @@ EvoEditor.initializeContent = function()
 			}
 		}
 
-		/* Make sure there is a selection */
+		// make sure there is a selection
 		if (!document.getSelection().baseNode) {
 			document.getSelection().setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
 		}
@@ -3348,6 +3351,48 @@ EvoEditor.GetCaretWord = function()
 	return range.toString();
 }
 
+EvoEditor.ReplaceCaretWord = function(replacement)
+{
+	if (document.getSelection().rangeCount < 1)
+		return null;
+
+	var range = document.getSelection().getRangeAt(0);
+
+	if (!range)
+		return null;
+
+	range.expand("word");
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "ReplaceCaretWord", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		var fragment = range.extractContents(), node;
+
+		/* Get the text node to replace and leave other formatting nodes
+		 * untouched (font color, boldness, ...). */
+		fragment.normalize();
+
+		for (node = fragment.firstChild; node && node.nodeType != node.TEXT_NODE; node = node.firstChild) {
+			;
+		}
+
+		if (node && node.nodeType == node.TEXT_NODE) {
+			var text;
+
+			/* Replace the word */
+			text = document.createTextNode(replacement);
+			node.parentNode.replaceChild(text, node);
+
+			/* Insert the word on current location. */
+			range.insertNode(fragment);
+			document.getSelection().modify("move", "forward", "word");
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, "ReplaceCaretWord");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
+}
+
 EvoEditor.SpellCheckContinue = function(fromCaret, directionNext)
 {
 	var selection, storedSelection = null;
@@ -3448,6 +3493,28 @@ EvoEditor.InsertEmoticon = function(text, imageUri, width, height)
 	} else {
 		EvoEditor.InsertHTML("InsertEmoticon", text);
 	}
+}
+
+EvoEditor.GetCurrentSignatureUid = function()
+{
+	var elem = document.querySelector(".-x-evo-signature[id]");
+
+	if (elem)
+		return elem.id;
+
+	return "";
+}
+
+EvoEditor.InsertSignature = function(content, is_html, uid, fromMessage, checkChanged, ignoreNextChange, startBottom, topSignature, addDelimiter)
+{
+	var res = [];
+
+	res["fromMessage"] = fromMessage;
+	res["checkChanged"] = checkChanged;
+	res["ignoreNextChange"] = ignoreNextChange;
+	res["newUid"] = uid;
+
+	return res;
 }
 
 EvoEditor.onContextMenu = function(event)

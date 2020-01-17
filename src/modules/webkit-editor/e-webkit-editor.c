@@ -595,16 +595,27 @@ webkit_editor_dialog_utils_has_attribute (EWebKitEditor *wk_editor,
 		FALSE);
 }
 
-static gint16
-e_webkit_editor_three_state_to_int16 (EThreeState value)
+static gboolean
+e_webkit_editor_three_state_to_bool (EThreeState value,
+				     const gchar *mail_key)
 {
+	gboolean res = FALSE;
+
 	if (value == E_THREE_STATE_ON)
-		return 1;
+		return TRUE;
 
 	if (value == E_THREE_STATE_OFF)
-		return 0;
+		return FALSE;
 
-	return -1;
+	if (mail_key && *mail_key) {
+		GSettings *settings;
+
+		settings = e_util_ref_settings ("org.gnome.evolution.mail");
+		res = g_settings_get_boolean (settings, mail_key);
+		g_clear_object (&settings);
+	}
+
+	return res;
 }
 
 EWebKitEditor *
@@ -2023,24 +2034,6 @@ webkit_editor_set_html_mode (EWebKitEditor *wk_editor,
 }
 
 static void
-set_convert_in_situ (EWebKitEditor *wk_editor,
-                     gboolean value)
-{
-	GVariant *result;
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"SetConvertInSitu",
-		g_variant_new ("(tbnn)", current_page_id (wk_editor), value,
-			e_webkit_editor_three_state_to_int16 (e_content_editor_get_start_bottom (E_CONTENT_EDITOR (wk_editor))),
-			e_webkit_editor_three_state_to_int16 (e_content_editor_get_top_signature (E_CONTENT_EDITOR (wk_editor)))),
-		NULL);
-
-	if (result)
-		g_variant_unref (result);
-}
-
-static void
 e_webkit_editor_load_data (EWebKitEditor *wk_editor,
 			   const gchar *html)
 {
@@ -2120,7 +2113,6 @@ webkit_editor_insert_content (EContentEditor *editor,
 		}
 
 		if (strstr (content, "data-evo-draft") && !(wk_editor->priv->html_mode)) {
-			set_convert_in_situ (wk_editor, TRUE);
 			wk_editor->priv->reload_in_progress = TRUE;
 			e_webkit_editor_load_data (wk_editor, content);
 			return;
@@ -2131,14 +2123,12 @@ webkit_editor_insert_content (EContentEditor *editor,
 			if (strstr (content, "<!-- text/html -->") &&
 			    !strstr (content, "<!-- disable-format-prompt -->")) {
 				if (!show_lose_formatting_dialog (wk_editor)) {
-					set_convert_in_situ (wk_editor, FALSE);
 					wk_editor->priv->reload_in_progress = TRUE;
 					webkit_editor_set_html_mode (wk_editor, TRUE);
 					e_webkit_editor_load_data (wk_editor, content);
 					return;
 				}
 			}
-			set_convert_in_situ (wk_editor, TRUE);
 		}
 
 		wk_editor->priv->reload_in_progress = TRUE;
@@ -2149,8 +2139,8 @@ webkit_editor_insert_content (EContentEditor *editor,
 			wk_editor->priv->web_extension_proxy,
 			"DOMConvertContent",
 			g_variant_new ("(tsnn)", current_page_id (wk_editor), content,
-				e_webkit_editor_three_state_to_int16 (e_content_editor_get_start_bottom (editor)),
-				e_webkit_editor_three_state_to_int16 (e_content_editor_get_top_signature (editor))),
+				e_webkit_editor_three_state_to_bool (e_content_editor_get_start_bottom (editor), "composer-reply-start-bottom"),
+				e_webkit_editor_three_state_to_bool (e_content_editor_get_top_signature (editor), "composer-top-signature")),
 			wk_editor->priv->cancellable);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
 		    !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
@@ -2687,34 +2677,6 @@ webkit_editor_set_editable (EWebKitEditor *wk_editor,
 	return webkit_web_view_set_editable (WEBKIT_WEB_VIEW (wk_editor), editable);
 }
 
-static gchar *
-webkit_editor_get_current_signature_uid (EContentEditor *editor)
-{
-	EWebKitEditor *wk_editor;
-	gchar *ret_val= NULL;
-	GVariant *result;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return NULL;
-	}
-
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMGetActiveSignatureUid",
-		g_variant_new ("(t)", current_page_id (wk_editor)),
-		NULL);
-
-	if (result) {
-		g_variant_get (result, "(s)", &ret_val);
-		g_variant_unref (result);
-	}
-
-	return ret_val;
-}
-
 static gboolean
 webkit_editor_is_ready (EContentEditor *editor)
 {
@@ -2728,7 +2690,17 @@ webkit_editor_is_ready (EContentEditor *editor)
 		!wk_editor->priv->reload_in_progress;
 }
 
-static char *
+static gchar *
+webkit_editor_get_current_signature_uid (EContentEditor *editor)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), NULL);
+
+	return webkit_editor_extract_and_free_jsc_string (
+		webkit_editor_call_jsc_sync (E_WEBKIT_EDITOR (editor), "EvoEditor.GetCurrentSignatureUid();"),
+		NULL);
+}
+
+static gchar *
 webkit_editor_insert_signature (EContentEditor *editor,
                                 const gchar *content,
                                 gboolean is_html,
@@ -2737,45 +2709,33 @@ webkit_editor_insert_signature (EContentEditor *editor,
                                 gboolean *check_if_signature_is_changed,
                                 gboolean *ignore_next_signature_change)
 {
-	EWebKitEditor *wk_editor;
-	gchar *ret_val = NULL;
-	GVariant *result;
+	JSCValue *jsc_value;
+	gchar *res = NULL;
 
-	wk_editor = E_WEBKIT_EDITOR (editor);
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), NULL);
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return NULL;
+	jsc_value = webkit_editor_call_jsc_sync (E_WEBKIT_EDITOR (editor),
+		"EvoEditor.InsertSignature(%s, %x, %s, %x, %x, %x, %x, %x, %x);",
+		content ? content : "",
+		is_html,
+		signature_id,
+		*set_signature_from_message,
+		*check_if_signature_is_changed,
+		*ignore_next_signature_change,
+		e_webkit_editor_three_state_to_bool (e_content_editor_get_start_bottom (editor), "composer-reply-start-bottom"),
+		e_webkit_editor_three_state_to_bool (e_content_editor_get_top_signature (editor), "composer-top-signature"),
+		!e_webkit_editor_three_state_to_bool (E_THREE_STATE_INCONSISTENT, "composer-no-signature-delim"));
+
+	if (jsc_value) {
+		*set_signature_from_message = e_web_view_jsc_get_object_property_boolean (jsc_value, "fromMessage", FALSE);
+		*check_if_signature_is_changed = e_web_view_jsc_get_object_property_boolean (jsc_value, "checkChanged", FALSE);
+		*ignore_next_signature_change = e_web_view_jsc_get_object_property_boolean (jsc_value, "ignoreNextChange", FALSE);
+		res = e_web_view_jsc_get_object_property_string (jsc_value, "newUid", NULL);
+
+		g_clear_object (&jsc_value);
 	}
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMInsertSignature",
-		g_variant_new (
-			"(tsbsbbbnn)",
-			current_page_id (wk_editor),
-			content ? content : "",
-			is_html,
-			signature_id,
-			*set_signature_from_message,
-			*check_if_signature_is_changed,
-			*ignore_next_signature_change,
-			e_webkit_editor_three_state_to_int16 (e_content_editor_get_start_bottom (editor)),
-			e_webkit_editor_three_state_to_int16 (e_content_editor_get_top_signature (editor))),
-		NULL);
-
-	if (result) {
-		g_variant_get (
-			result,
-			"(sbbb)",
-			&ret_val,
-			set_signature_from_message,
-			check_if_signature_is_changed,
-			ignore_next_signature_change);
-		g_variant_unref (result);
-	}
-
-	return ret_val;
+	return res;
 }
 
 static void
@@ -2796,22 +2756,13 @@ webkit_editor_replace_caret_word (EContentEditor *editor,
                                   const gchar *replacement)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMReplaceCaretWord",
-		g_variant_new ("(ts)", current_page_id (wk_editor), replacement),
-		wk_editor->priv->cancellable);
-
-	if (result)
-		g_variant_unref (result);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.ReplaceCaretWord(%s);", replacement);
 }
 
 static void
