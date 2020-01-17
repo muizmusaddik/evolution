@@ -4164,7 +4164,7 @@ webkit_editor_set_unicode_smileys (EWebKitEditor *wk_editor,
 			"EvoEditor.UNICODE_SMILEYS = %x;",
 			value);
 
-		g_object_notify (G_OBJECT (wk_editor), "unicide-smileys");
+		g_object_notify (G_OBJECT (wk_editor), "unicode-smileys");
 	}
 }
 
