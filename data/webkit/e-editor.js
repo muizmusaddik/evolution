@@ -1727,6 +1727,17 @@ EvoEditor.SetNormalParagraphWidth = function(value)
 	}
 }
 
+EvoEditor.convertImages = function()
+{
+	var ii;
+
+	for (ii = document.images.length - 1; ii >= 0; ii--) {
+		var img = document.images[ii];
+
+		img.outerText = EvoConvert.ImgToText(img);
+	}
+}
+
 EvoEditor.SetMode = function(mode)
 {
 	if (EvoEditor.mode != mode) {
@@ -1751,6 +1762,7 @@ EvoEditor.SetMode = function(mode)
 			EvoEditor.mode = mode;
 
 			if (mode == EvoEditor.MODE_PLAIN_TEXT) {
+				EvoEditor.convertImages();
 				EvoEditor.convertParagraphs(document.body, EvoEditor.NORMAL_PARAGRAPH_WIDTH);
 			} else {
 				EvoEditor.convertParagraphs(document.body, -1);
@@ -2060,7 +2072,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 				    src.startsWith("evo-file://")) {
 					for (jj = 0; jj < img_elems.length; jj++) {
 						if (elem.src == img_elems[jj].orig_src) {
-							elem.subelems[elem.subelems.length] = elem;
+							img_elems[jj].subelems[img_elems[jj].subelems.length] = elem;
 							elem.src = img_elems[jj].cid;
 							break;
 						}
@@ -2104,7 +2116,7 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 
 					for (jj = 0; jj < bkg_elems.length; jj++) {
 						if (bkg == bkg_elems[jj].orig_src) {
-							elem.subelems[elem.subelems.length] = elem;
+							bkg_elems[jj].subelems[bkg_elems[jj].subelems.length] = elem;
 							elem.setAttribute("background", bkg_elems[jj].cid);
 							break;
 						}
@@ -3426,18 +3438,13 @@ EvoEditor.MoveSelectionToPoint = function(xx, yy, cancel_if_not_collapsed)
 	}
 }
 
-EvoEditor.InsertEmoticon = function(text, imageUri)
+EvoEditor.InsertEmoticon = function(text, imageUri, width, height)
 {
 	if (imageUri) {
 		EvoEditor.InsertHTML("InsertEmoticon",
-			"<span class=\"-x-evo-smiley-wrapper\">" +
-			"<img class=\"-x-evo-smiley-img\" src=\"" + imageUri + "\" alt=\"" +
+			"<img src=\"" + imageUri + "\" alt=\"" +
 				text.replace(/\&/g, "&amp;").replace(/\"/g, "&quot;").replace(/\'/g, "&apos;") +
-			"\">" +
-			"<span class=\"-x-evo-smiley-text\">" +
-				text.replace(/\&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") +
-			"</span>" +
-			"</span>&#x200b;");
+			"\" width=\"" + width + "px\" height=\"" + height + "px\">");
 	} else {
 		EvoEditor.InsertHTML("InsertEmoticon", text);
 	}

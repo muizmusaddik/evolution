@@ -1614,7 +1614,7 @@ test_get_content (TestFixture *fixture)
 	test_get_document_content_verify (fixture, "", NULL, expect_html);
 	test_get_document_content_verify (fixture, "", expect_plain, expect_html);
 
-	expect_plain = "frm1 div";
+	expect_plain = "frm1 div\n";
 	expect_html = html_frm1;
 	test_get_document_content_verify (fixture, "frm1", expect_plain, NULL);
 	test_get_document_content_verify (fixture, "frm1", NULL, expect_html);
@@ -1658,7 +1658,7 @@ test_get_content (TestFixture *fixture)
 	test_get_element_content_verify (fixture, "", "*body", TRUE, NULL, expect_html);
 	test_get_element_content_verify (fixture, "", "*body", TRUE, expect_plain, expect_html);
 
-	expect_plain = "frm1 div";
+	expect_plain = "frm1 div\n";
 	expect_html ="<span id=\"frm1p\"><div id=\"frst\">frm1 div</div></span>";
 	test_get_element_content_verify (fixture, "frm1", "*body", FALSE, expect_plain, NULL);
 	test_get_element_content_verify (fixture, "frm1", "*body", FALSE, NULL, expect_html);

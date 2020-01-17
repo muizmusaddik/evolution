@@ -1376,22 +1376,6 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"  font-family: Monospace; \n"
 		"}\n");
 
-	if (wk_editor->priv->html_mode) {
-		g_string_append (
-			stylesheet,
-			"span.-x-evo-smiley-text"
-			"{\n"
-			"  display: none \n"
-			"}\n");
-	} else {
-		g_string_append (
-			stylesheet,
-			"img.-x-evo-smiley-img"
-			"{\n"
-			"  display: none \n"
-			"}\n");
-	}
-
 	g_string_append (
 		stylesheet,
 		"[data-evo-paragraph] "
@@ -2413,9 +2397,10 @@ webkit_editor_insert_emoticon (EContentEditor *editor,
 	GSettings *settings;
 	const gchar *text;
 	gchar *image_uri = NULL;
+	gint width = 0, height = 0;
 
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
-	g_return_if_fail  (emoticon != NULL);
+	g_return_if_fail (emoticon != NULL);
 
 	settings = e_util_ref_settings ("org.gnome.evolution.mail");
 
@@ -2424,13 +2409,18 @@ webkit_editor_insert_emoticon (EContentEditor *editor,
 	} else {
 		text = emoticon->text_face;
 		image_uri = e_emoticon_get_uri (emoticon);
+
+		if (image_uri) {
+			width = 16;
+			height = 16;
+		}
 	}
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
 	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-		"EvoEditor.InsertEmoticon(%s, %s);",
-		text, image_uri);
+		"EvoEditor.InsertEmoticon(%s, %s, %d, %d);",
+		text, image_uri, width, height);
 
 	g_clear_object (&settings);
 	g_free (image_uri);

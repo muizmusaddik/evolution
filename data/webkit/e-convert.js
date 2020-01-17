@@ -571,6 +571,47 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 	return str;
 }
 
+EvoConvert.ImgToText = function(img)
+{
+	if (!img)
+		return "";
+
+	var txt;
+
+	txt = img.alt;
+
+	if (!txt) {
+		txt = img.src;
+
+		if (txt.startsWith("cid:"))
+			txt = "";
+	}
+
+	return txt;
+}
+
+EvoConvert.extractElemText = function(elem, normalDivWidth)
+{
+	if (!elem)
+		return "";
+
+	if (!elem.childNodes.length)
+		return elem.innerText;
+
+	var str = "", ii;
+
+	for (ii = 0; ii < elem.childNodes.length; ii++) {
+		var node = elem.childNodes.item(ii);
+
+		if (!node)
+			continue;
+
+		str += EvoConvert.processNode(node, normalDivWidth);
+	}
+
+	return str;
+}
+
 EvoConvert.processNode = function(node, normalDivWidth)
 {
 	var str = "";
@@ -631,7 +672,7 @@ EvoConvert.processNode = function(node, normalDivWidth)
 
 		whiteSpace = style ? style.whiteSpace.toLowerCase() : "";
 
-		if (node.tagName == "DIV") {
+		if (node.tagName == "DIV" || node.tagName == "P") {
 			var liText, extraIndent, width;
 
 			liText = node.getAttribute("x-evo-li-text");
@@ -653,13 +694,15 @@ EvoConvert.processNode = function(node, normalDivWidth)
 				width = normalDivWidth;
 			}
 
-			str = EvoConvert.formatParagraph(node.innerText, ltr, align, indent, whiteSpace, width, extraIndent, liText);
+			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth), ltr, align, indent, whiteSpace, width, extraIndent, liText);
 		} else if (node.tagName == "PRE") {
-			str = EvoConvert.formatParagraph(node.innerText, ltr, align, indent, "pre", -1, 0, "");
+			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth), ltr, align, indent, "pre", -1, 0, "");
 		} else if (node.tagName == "BR") {
 			str = "\n";
+		} else if (node.tagName == "IMG") {
+			str = EvoConvert.ImgToText(node);
 		} else {
-			str = node.innerText;
+			str = EvoConvert.extractElemText(node, normalDivWidth);
 
 			if (str != "\n" && ((style && style.display == "block") || node.tagName == "ADDRESS")) {
 				str += "\n";
