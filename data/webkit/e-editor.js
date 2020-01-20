@@ -3351,19 +3351,23 @@ EvoEditor.GetCaretWord = function()
 	return range.toString();
 }
 
-EvoEditor.ReplaceCaretWord = function(replacement)
+EvoEditor.replaceSelectionWord = function(opType, expandWord, replacement)
 {
+	if (!expandWord && document.getSelection().isCollapsed)
+		return;
+
 	if (document.getSelection().rangeCount < 1)
-		return null;
+		return;
 
 	var range = document.getSelection().getRangeAt(0);
 
 	if (!range)
-		return null;
+		return;
 
-	range.expand("word");
+	if (expandWord)
+		range.expand("word");
 
-	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "ReplaceCaretWord", null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType, null, null, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 	try {
 		var fragment = range.extractContents(), node;
 
@@ -3375,7 +3379,7 @@ EvoEditor.ReplaceCaretWord = function(replacement)
 			;
 		}
 
-		if (node && node.nodeType == node.TEXT_NODE) {
+		if (node && node.nodeType == node.TEXT_NODE && replacement) {
 			var text;
 
 			/* Replace the word */
@@ -3387,10 +3391,20 @@ EvoEditor.ReplaceCaretWord = function(replacement)
 			document.getSelection().modify("move", "forward", "word");
 		}
 	} finally {
-		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, "ReplaceCaretWord");
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_EVENT, opType);
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
 	}
+}
+
+EvoEditor.ReplaceCaretWord = function(replacement)
+{
+	EvoEditor.replaceSelectionWord("ReplaceCaretWord", true, replacement);
+}
+
+EvoEditor.ReplaceSelection = function(replacement)
+{
+	EvoEditor.replaceSelectionWord("ReplaceSelection", false, replacement);
 }
 
 EvoEditor.SpellCheckContinue = function(fromCaret, directionNext)
@@ -3505,8 +3519,205 @@ EvoEditor.GetCurrentSignatureUid = function()
 	return "";
 }
 
-EvoEditor.InsertSignature = function(content, is_html, uid, fromMessage, checkChanged, ignoreNextChange, startBottom, topSignature, addDelimiter)
+EvoEditor.InsertSignature = function(content, isHTML, uid, fromMessage, checkChanged, ignoreNextChange, startBottom, topSignature, addDelimiter)
 {
+	var sigSpan, node;
+
+	sigSpan = document.createElement("SPAN");
+	sigSpan.className = "-x-evo-signature";
+	sigSpan.id = uid;
+
+	if (content) {
+		if (isHTML && EvoEditor.mode != EvoEditor.MODE_HTML) {
+			node = document.createElement("SPAN");
+			node.innerHTML = content;
+
+			content = EvoConvert.ToPlainText(node, EvoEditor.NORMAL_PARAGRAPH_WIDTH);
+			if (content != "") {
+				content = "<PRE>" + content.replace(/\&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</PRE>";
+			}
+
+			isHTML = false;
+		}
+
+		/* The signature dash convention ("-- \n") is specified
+		 * in the "Son of RFC 1036", section 4.3.2.
+		 * http://www.chemie.fu-berlin.de/outerspace/netnews/son-of-1036.html
+		 */
+		if (addDelimiter) {
+			var found;
+
+			if (isHTML) {
+				found = content.substr(0, 8).toUpperCase().startsWith("-- <BR>") || content.match(/\n-- <BR>/i) != null;
+			} else {
+				found = content.startsWith("-- \n") || content.match(/\n-- \n/i) != null;
+			}
+
+			/* Skip the delimiter if the signature already has one. */
+			if (!found) {
+				/* Always use the HTML delimiter as we are never in anything
+				 * like a strict plain text mode. */
+				node = document.createElement("PRE");
+				node.innerHTML = "-- <BR>";
+				sigSpan.appendChild(node);
+			}
+		}
+
+		sigSpan.insertAdjacentHTML("beforeend", content);
+
+		node = sigSpan.querySelector("[data-evo-signature-plain-text-mode]");
+		if (node)
+			node.removeAttribute("[data-evo-signature-plain-text-mode]");
+
+		node = sigSpan.querySelector("#-x-evo-selection-start-marker");
+		if (node && node.parentElement)
+			node.parentElement.removeChild(node);
+
+		node = sigSpan.querySelector("#-x-evo-selection-end-marker");
+		if (node && node.parentElement)
+			node.parentElement.removeChild(node);
+	}
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "InsertSignature");
+	try {
+		var signatures, ii, done = false, useWrapper = null;
+
+		signatures = document.getElementsByClassName("-x-evo-signature-wrapper");
+		for (ii = signatures.length; ii-- && !done;) {
+			var wrapper, signature;
+
+			wrapper = signatures[ii];
+			signature = wrapper.firstElementChild;
+
+			/* When we are editing a message with signature, we need to unset the
+			 * active signature id as if the signature in the message was edited
+			 * by the user we would discard these changes. */
+			if (fromMessage && content && signature) {
+				if (checkChanged) {
+					/* Normalize the signature that we want to insert as the one in the
+					 * message already is normalized. */
+					webkit_dom_node_normalize (WEBKIT_DOM_NODE (signature_to_insert));
+					if (!webkit_dom_node_is_equal_node (WEBKIT_DOM_NODE (signature_to_insert), signature)) {
+						/* Signature in the body is different than the one with the
+						 * same id, so set the active signature to None and leave
+						 * the signature that is in the body. */
+						uid = "none";
+						ignoreNextChange = true;
+					}
+
+					checkChanged = false;
+					fromMessage = false;
+				} else {
+					/* Old messages will have the signature id in the name attribute, correct it. */
+					if (signature.hasAttribute("name")) {
+						id = signature.getAttribute("name");
+						signature.id = id;
+						signature.removeAttribute(name);
+					} else {
+						id = signature.id;
+					}
+
+					/* Keep the signature and check if is it the same
+					 * as the signature in body or the user previously
+					 * changed it. */
+					checkChanged = true;
+				}
+
+				done = true;
+			} else {
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::old-changes", wrapper, wrapper,
+					EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
+				try {
+					/* If the top signature was set we have to remove the newline
+					 * that was inserted after it */
+					if (topSignature) {
+						node = document.querySelector(".-x-evo-top-signature-spacer");
+						if (node && (!node.firstChild || !node.textContent ||
+						    (node.childNodes.length == 1 && node.firstChild.tagName == "BR"))) {
+							if (node.parentElement)
+								node.parentElement.removeChild(node);
+						}
+					}
+
+					/* Leave just one signature wrapper there as it will be reused. */
+					if (ii) {
+						if (wrapper.parentElement)
+							wrapper.parentElement.removeChild(wrapper);
+					} else {
+						wrapper.removeChild(signature);
+						useWrapper = wrapper;
+					}
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::old-changes");
+				}
+			}
+		}
+
+		if (!done) {
+			if (useWrapper) {
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::new-changes", useWrapper, useWrapper, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+				try {
+					useWrapper.appendChild(sigSpan);
+
+					/* Insert a spacer below the top signature */
+					if (topSignature && content) {
+						node = document.createElement("DIV");
+						node.appendChild(document.createElement("BR"));
+						node.className = "-x-evo-top-signature-spacer";
+
+						document.body.insertBefore(node, useWrapper.nextSibling);
+					}
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::new-changes");
+				}
+			} else {
+				useWrapper = document.createElement("DIV");
+				useWrapper.className = "-x-evo-signature-wrapper";
+				useWrapper.appendChild(sigSpan);
+
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::new-changes", document.body, document.body, EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+				try {
+					if (topSignature) {
+						document.body.insertBefore(useWrapper, document.body.firstChild);
+
+						node = document.createElement("DIV");
+						node.appendChild(document.createElement("BR"));
+						node.className = "-x-evo-top-signature-spacer";
+
+						document.body.insertBefore(node, useWrapper.nextSibling);
+					} else {
+						document.body.appendChild(useWrapper);
+					}
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertSignature::new-changes");
+				}
+			}
+
+			fromMessage = false;
+
+			// Position the caret and scroll to it
+			if (startBottom) {
+				if (topSignature) {
+					document.getSelection().setPosition(document.body.lastChild, 0);
+				} else if (useWrapper.previousSibling) {
+					document.getSelection().setPosition(useWrapper.previousSibling, 0);
+				} else {
+					document.getSelection().setPosition(useWrapper, 0);
+				}
+			} else {
+				document.getSelection().setPosition(document.body.firstChild, 0);
+			}
+
+			node = document.getSelection().baseNode;
+
+			if (node) {
+				node.scrollIntoViewIfNeeded();
+			}
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "InsertSignature");
+	}
+
 	var res = [];
 
 	res["fromMessage"] = fromMessage;

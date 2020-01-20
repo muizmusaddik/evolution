@@ -2710,9 +2710,16 @@ webkit_editor_insert_signature (EContentEditor *editor,
                                 gboolean *ignore_next_signature_change)
 {
 	JSCValue *jsc_value;
-	gchar *res = NULL;
+	gchar *res = NULL, *tmp = NULL;
 
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (editor), NULL);
+
+	if (!is_html && content && *content) {
+		tmp = camel_text_to_html (content, CAMEL_MIME_FILTER_TOHTML_PRE, 0);
+
+		if (tmp)
+			content = tmp;
+	}
 
 	jsc_value = webkit_editor_call_jsc_sync (E_WEBKIT_EDITOR (editor),
 		"EvoEditor.InsertSignature(%s, %x, %s, %x, %x, %x, %x, %x, %x);",
@@ -2725,6 +2732,8 @@ webkit_editor_insert_signature (EContentEditor *editor,
 		e_webkit_editor_three_state_to_bool (e_content_editor_get_start_bottom (editor), "composer-reply-start-bottom"),
 		e_webkit_editor_three_state_to_bool (e_content_editor_get_top_signature (editor), "composer-top-signature"),
 		!e_webkit_editor_three_state_to_bool (E_THREE_STATE_INCONSISTENT, "composer-no-signature-delim"));
+
+	g_free (tmp);
 
 	if (jsc_value) {
 		*set_signature_from_message = e_web_view_jsc_get_object_property_boolean (jsc_value, "fromMessage", FALSE);
@@ -2815,22 +2824,13 @@ webkit_editor_replace (EContentEditor *editor,
                        const gchar *replacement)
 {
 	EWebKitEditor *wk_editor;
-	GVariant *result;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
 
-	result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMSelectionReplace",
-		g_variant_new ("(ts)", current_page_id (wk_editor), replacement),
-		wk_editor->priv->cancellable);
-
-	if (result)
-		g_variant_unref (result);
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.ReplaceSelection(%s);", replacement);
 }
 
 static gboolean
@@ -2855,11 +2855,8 @@ webkit_find_controller_found_text_cb (WebKitFindController *find_controller,
 		/* Repeatedly search for 'word', then replace selection by
 		 * 'replacement'. Repeat until there's at least one occurrence of
 		 * 'word' in the document */
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMSelectionReplace",
-			g_variant_new ("(ts)", current_page_id (wk_editor), wk_editor->priv->replace_with),
-			wk_editor->priv->cancellable);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.ReplaceSelection(%s);", wk_editor->priv->replace_with);
 
 		g_idle_add ((GSourceFunc) search_next_on_idle, wk_editor);
 	} else {
@@ -2875,26 +2872,6 @@ webkit_find_controller_failed_to_find_text_cb (WebKitFindController *find_contro
 
 	if (wk_editor->priv->performing_replace_all) {
 		guint replaced_count = wk_editor->priv->replaced_count;
-
-		if (replaced_count > 0) {
-			if (!wk_editor->priv->web_extension_proxy) {
-				printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-			} else {
-				GVariant *result;
-
-				result = e_util_invoke_g_dbus_proxy_call_sync_wrapper_with_error_check (
-					wk_editor->priv->web_extension_proxy,
-					"DOMInsertReplaceAllHistoryEvent",
-					g_variant_new ("(tss)",
-						current_page_id (wk_editor),
-						webkit_find_controller_get_search_text (find_controller),
-						wk_editor->priv->replace_with),
-					NULL);
-
-				if (result)
-					g_variant_unref (result);
-			}
-		}
 
 		webkit_editor_finish_search (wk_editor);
 		e_content_editor_emit_replace_all_done (E_CONTENT_EDITOR (wk_editor), replaced_count);
