@@ -150,13 +150,11 @@ static void
 e_mail_notes_editor_extract_text_from_multipart_related (EMailNotesEditor *notes_editor,
 							 CamelMultipart *multipart)
 {
-	EContentEditor *cnt_editor;
 	guint ii, nparts;
 
 	g_return_if_fail (E_IS_MAIL_NOTES_EDITOR (notes_editor));
 	g_return_if_fail (CAMEL_IS_MULTIPART (multipart));
 
-	cnt_editor = e_html_editor_get_content_editor (notes_editor->editor);
 	nparts = camel_multipart_get_number (multipart);
 
 	for (ii = 0; ii < nparts; ii++) {
@@ -173,11 +171,14 @@ e_mail_notes_editor_extract_text_from_multipart_related (EMailNotesEditor *notes
 			continue;
 
 		if (camel_content_type_is (ct, "image", "*")) {
-			e_content_editor_insert_image_from_mime_part (cnt_editor, part);
+			e_html_editor_add_cid_part (notes_editor->editor, part);
 		} else if (camel_content_type_is (ct, "multipart", "alternative")) {
 			content = camel_medium_get_content (CAMEL_MEDIUM (part));
-			if (CAMEL_IS_MULTIPART (content))
-				e_mail_notes_extract_text_from_multipart_alternative (cnt_editor, CAMEL_MULTIPART (content));
+
+			if (CAMEL_IS_MULTIPART (content)) {
+				e_mail_notes_extract_text_from_multipart_alternative (
+					e_html_editor_get_content_editor (notes_editor->editor), CAMEL_MULTIPART (content));
+			}
 		}
 	}
 }

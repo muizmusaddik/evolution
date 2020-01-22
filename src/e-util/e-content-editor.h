@@ -82,10 +82,6 @@ struct _EContentEditorInterface {
 	void		(*insert_image)			(EContentEditor *editor,
 							 const gchar *uri);
 
-	void            (*insert_image_from_mime_part)
-							(EContentEditor *editor,
-							 CamelMimePart *part);
-
 	void		(*insert_emoticon)		(EContentEditor *editor,
 							 EEmoticon *emoticon);
 
@@ -409,13 +405,6 @@ struct _EContentEditorInterface {
 	gchar *		(*spell_check_prev_word)	(EContentEditor *editor,
 							 const gchar *word);
 
-	void		(*resource_loaded)		(EContentEditor *editor,
-							 const gchar *uri,
-							 GInputStream *stream,
-							 gint64 stream_length,
-							 const gchar *mime_type,
-							 const GError *error);
-
 	/* Signals */
 	void		(*load_finished)		(EContentEditor *editor);
 	gboolean	(*paste_clipboard)		(EContentEditor *editor);
@@ -430,9 +419,8 @@ struct _EContentEditorInterface {
 							 guint replaced_count);
 	void		(*drop_handled)			(EContentEditor *editor);
 	void		(*content_changed)		(EContentEditor *editor);
-	void		(*request_resource)		(EContentEditor *editor,
-							 const gchar *uri,
-							 GCancellable *cancellable);
+	CamelMimePart *	(*ref_mime_part)		(EContentEditor *editor,
+							 const gchar *uri);
 };
 
 /* Properties */
@@ -575,10 +563,6 @@ CamelMimePart *	e_content_editor_util_create_data_mimepart
 						 const gchar *prefer_filename,
 						 const gchar *prefer_mime_type,
 						 GCancellable *cancellable);
-
-void            e_content_editor_insert_image_from_mime_part
-						(EContentEditor *editor,
-						 CamelMimePart *part);
 
 void		e_content_editor_insert_image	(EContentEditor *editor,
 						 const gchar *uri);
@@ -992,13 +976,6 @@ void		e_content_editor_spell_check_replace_all
 						 const gchar *word,
 						 const gchar *replacement);
 
-void		e_content_editor_resource_loaded(EContentEditor *editor,
-						 const gchar *uri,
-						 GInputStream *stream,
-						 gint64 stream_length,
-						 const gchar *mime_type,
-						 const GError *error);
-
 /* Signal helpers */
 
 void		e_content_editor_emit_load_finished
@@ -1021,10 +998,9 @@ void		e_content_editor_emit_drop_handled
 						(EContentEditor *editor);
 void		e_content_editor_emit_content_changed
 						(EContentEditor *editor);
-void		e_content_editor_emit_request_resource
+CamelMimePart *	e_content_editor_emit_ref_mime_part
 						(EContentEditor *editor,
-						 const gchar *uri,
-						 GCancellable *cancellable);
+						 const gchar *uri);
 
 G_END_DECLS
 

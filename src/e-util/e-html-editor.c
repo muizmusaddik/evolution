@@ -962,6 +962,7 @@ html_editor_finalize (GObject *object)
 {
 	EHTMLEditor *editor = E_HTML_EDITOR (object);
 
+	g_hash_table_destroy (editor->priv->cid_parts);
 	g_hash_table_destroy (editor->priv->content_editors);
 
 	/* Chain up to parent's method. */
@@ -1058,6 +1059,7 @@ e_html_editor_init (EHTMLEditor *editor)
 	priv->language_actions = gtk_action_group_new ("language");
 	priv->spell_check_actions = gtk_action_group_new ("spell-check");
 	priv->suggestion_actions = gtk_action_group_new ("suggestion");
+	priv->cid_parts = g_hash_table_new_full (camel_strcase_hash, camel_strcase_equal, g_free, g_object_unref);
 	priv->content_editors = g_hash_table_new_full (camel_strcase_hash, camel_strcase_equal, g_free, NULL);
 
 	filename = html_editor_find_ui_file ("e-html-editor-manager.ui");
@@ -1205,8 +1207,12 @@ e_html_editor_get_content_editor (EHTMLEditor *editor)
 			}
 		}
 
-		if (editor->priv->use_content_editor)
+		if (editor->priv->use_content_editor) {
 			e_content_editor_setup_editor (editor->priv->use_content_editor, editor);
+
+			g_signal_connect_swapped (editor->priv->use_content_editor, "ref-mime-part",
+				G_CALLBACK (e_html_editor_ref_cid_part), editor);
+		}
 	}
 
 	return editor->priv->use_content_editor;
@@ -1614,4 +1620,108 @@ e_html_editor_save_finish (EHTMLEditor *editor,
 	g_return_val_if_fail (e_simple_async_result_is_valid (result, G_OBJECT (editor), e_html_editor_save), FALSE);
 
 	return !e_simple_async_result_propagate_error (E_SIMPLE_ASYNC_RESULT (result), error);
+}
+
+/**
+ * e_html_editor_add_cid_part:
+ * @editor: an #EHTMLEditor
+ * @mime_part: a #CamelMimePart
+ *
+ * Add the @mime_part with its Content-ID (if not set, one is assigned),
+ * which can be later obtained with e_html_editor_ref_cid_part();
+ *
+ * Since: 3.36
+ **/
+void
+e_html_editor_add_cid_part (EHTMLEditor *editor,
+			    CamelMimePart *mime_part)
+{
+	const gchar *cid;
+	gchar *cid_uri;
+
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+	g_return_if_fail (CAMEL_IS_MIME_PART (mime_part));
+
+	cid = camel_mime_part_get_content_id (mime_part);
+
+	if (!cid) {
+		camel_mime_part_set_content_id (mime_part, NULL);
+		cid = camel_mime_part_get_content_id (mime_part);
+	}
+
+	cid_uri = g_strconcat ("cid:", cid, NULL);
+
+	g_hash_table_insert (editor->priv->cid_parts, cid_uri, g_object_ref (mime_part));
+}
+
+/**
+ * e_html_editor_remove_cid_part:
+ * @editor: an #EHTMLEditor
+ * @cid_uri: a Content ID URI (starts with "cid:") to remove
+ *
+ * Removes CID part with given @cid_uri, previously added with
+ * e_html_editor_add_cid_part(). The function does nothing if no
+ * such part is stored.
+ *
+ * Since: 3.36
+ **/
+void
+e_html_editor_remove_cid_part (EHTMLEditor *editor,
+			       const gchar *cid_uri)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+	g_return_if_fail (cid_uri != NULL);
+
+	g_hash_table_remove (editor->priv->cid_parts, cid_uri);
+}
+
+/**
+ * e_html_editor_remove_all_cid_parts:
+ * @editor: an #EHTMLEditor
+ *
+ * Removes all CID parts previously added with
+ * e_html_editor_add_cid_part().
+ *
+ * Since: 3.36
+ **/
+void
+e_html_editor_remove_all_cid_parts (EHTMLEditor *editor)
+{
+	g_return_if_fail (E_IS_HTML_EDITOR (editor));
+
+	g_hash_table_remove_all (editor->priv->cid_parts);
+}
+
+/**
+ * e_html_editor_ref_cid_part:
+ * @editor: an #EHTMLEditor
+ * @cid_uri: a Content ID URI (starts with "cid:") to obtain the part for
+ *
+ * References a #CamelMimePart with given @cid_uri as Content ID, if
+ * previously added with e_html_editor_add_cid_part(). The @cid_uri
+ * should start with "cid:".
+ *
+ * The returned non-%NULL object is references, thus it should be freed
+ * with g_object_unref(), when no longer needed.
+ *
+ * Returns: (transfer full) (nullable): a #CamelMimePart with given Content ID,
+ *    or %NULL, if not found.
+ *
+ * Since: 3.36
+ **/
+CamelMimePart *
+e_html_editor_ref_cid_part (EHTMLEditor *editor,
+			   const gchar *cid_uri)
+{
+	CamelMimePart *mime_part;
+
+	g_return_val_if_fail (E_IS_HTML_EDITOR (editor), NULL);
+	g_return_val_if_fail (cid_uri != NULL, NULL);
+
+	mime_part = g_hash_table_lookup (editor->priv->cid_parts, cid_uri);
+
+	if (mime_part)
+		g_object_ref (mime_part);
+
+	return mime_part;
 }

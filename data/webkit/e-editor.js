@@ -2106,9 +2106,9 @@ EvoEditor.GetContent = function(flags, cid_uid_prefix)
 				}
 			}
 
-			images = document.querySelectorAll("[background]");
-			for (ii = 0; ii < images.length; ii++) {
-				var elem = images[ii];
+			var backgrounds = document.querySelectorAll("[background]");
+			for (ii = 0; ii < backgrounds.length; ii++) {
+				var elem = backgrounds[ii];
 				var src = elem ? elem.getAttribute("background").toLowerCase() : "";
 
 				if (elem &&
@@ -3726,6 +3726,17 @@ EvoEditor.InsertSignature = function(content, isHTML, uid, fromMessage, checkCha
 	res["newUid"] = uid;
 
 	return res;
+}
+
+// the body contains data, which should be converted into editable content;
+// preferredPlainText can be empty, if not, then it replaces body content
+EvoEditor.ConvertContent = function(preferredPlainText, startBottom, topSignature)
+{
+}
+
+// replaces current selection with the next plain text or HTML, quoted or normal DIV
+EvoEditor.PasteText = function(text, isHTML, quote)
+{
 }
 
 EvoEditor.onContextMenu = function(event)

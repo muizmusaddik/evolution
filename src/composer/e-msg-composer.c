@@ -1608,7 +1608,7 @@ composer_build_message (EMsgComposer *composer,
 			for (link = inline_images_parts; link; link = g_slist_next (link)) {
 				CamelMimePart *part = link->data;
 
-				camel_multipart_add_part (html_with_images, part);
+				camel_multipart_add_part (html_with_images, g_object_ref (part));
 			}
 
 			context->top_level_part =
@@ -1617,7 +1617,6 @@ composer_build_message (EMsgComposer *composer,
 			context->top_level_part =
 				CAMEL_DATA_WRAPPER (body);
 		}
-		g_slist_free_full (inline_images_parts, g_object_unref);
 	}
 
 	view = e_msg_composer_get_attachment_view (composer);
@@ -3141,7 +3140,6 @@ add_attachments_handle_mime_part (EMsgComposer *composer,
 	CamelContentType *content_type;
 	CamelDataWrapper *wrapper;
 	EHTMLEditor *editor;
-	EContentEditor *cnt_editor;
 
 	if (!mime_part)
 		return;
@@ -3149,7 +3147,6 @@ add_attachments_handle_mime_part (EMsgComposer *composer,
 	content_type = camel_mime_part_get_content_type (mime_part);
 	wrapper = camel_medium_get_content (CAMEL_MEDIUM (mime_part));
 	editor = e_msg_composer_get_editor (composer);
-	cnt_editor = e_html_editor_get_content_editor (editor);
 
 	if (CAMEL_IS_MULTIPART (wrapper)) {
 		/* another layer of multipartness... */
@@ -3160,10 +3157,9 @@ add_attachments_handle_mime_part (EMsgComposer *composer,
 		if (camel_content_type_is (content_type, "image", "*") && (
 		    camel_mime_part_get_content_id (mime_part) ||
 		    camel_mime_part_get_content_location (mime_part)))
-			e_content_editor_insert_image_from_mime_part (
-				cnt_editor, mime_part);
+			e_html_editor_add_cid_part (editor, mime_part);
 	} else if (related && camel_content_type_is (content_type, "image", "*")) {
-		e_content_editor_insert_image_from_mime_part (cnt_editor, mime_part);
+		e_html_editor_add_cid_part (editor, mime_part);
 	} else if (camel_content_type_is (content_type, "text", "*") &&
 		camel_mime_part_get_filename (mime_part) == NULL) {
 		/* Do nothing if this is a text/anything without a
@@ -3583,12 +3579,10 @@ handle_multipart (EMsgComposer *composer,
 			   camel_mime_part_get_content_location (mime_part))) {
 			/* special in-line attachment */
 			EHTMLEditor *editor;
-			EContentEditor *cnt_editor;
 
 			editor = e_msg_composer_get_editor (composer);
-			cnt_editor = e_html_editor_get_content_editor (editor);
 
-			e_content_editor_insert_image_from_mime_part (cnt_editor, mime_part);
+			e_html_editor_add_cid_part (editor, mime_part);
 
 			/* Add it to both, to not lose attachments not referenced in HTML body.
 			   The inserted images are not included in the message when not referenced. */
@@ -4333,7 +4327,9 @@ e_msg_composer_prepare_content_hash (EMsgComposer *composer,
 	g_return_if_fail (E_IS_MSG_COMPOSER (composer));
 	g_return_if_fail (callback != NULL);
 
-	if (e_msg_composer_get_content_hash (composer)) {
+	/* Cannot use e_msg_composer_get_content_hash() here, because it prints
+	   a runtime warning when the content_hash is NULL. */
+	if (composer->priv->content_hash) {
 		composer->priv->content_hash_ref_count++;
 
 		callback (composer, user_data, NULL);

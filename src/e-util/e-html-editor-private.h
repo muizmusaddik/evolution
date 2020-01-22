@@ -87,6 +87,7 @@ struct _EHTMLEditorPrivate {
 
 	GtkWidget *emoji_chooser;
 
+	GHashTable *cid_parts; /* gchar *cid: URI ~> CamelMimePart * */
 	GHashTable *content_editors;
 	EContentEditor *use_content_editor;
 

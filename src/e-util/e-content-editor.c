@@ -37,7 +37,7 @@ enum {
 	REPLACE_ALL_DONE,
 	DROP_HANDLED,
 	CONTENT_CHANGED,
-	REQUEST_RESOURCE,
+	REF_MIME_PART,
 	LAST_SIGNAL
 };
 
@@ -619,24 +619,24 @@ e_content_editor_default_init (EContentEditorInterface *iface)
 		G_TYPE_NONE, 0);
 
 	/**
-	 * EContentEditor:request-resource
+	 * EContentEditor:ref-mime-part
 	 *
 	 * This is used by the content editor, when it wants to get
-	 * some resource. The listener to this signal should finish
-	 * the call with e_content_editor_resource_loaded().
+	 * a #CamelMimePart of given URI (aka "cid:..."). The returned
+	 * object, if not %NULL, should be freed with g_object_unref(),
+	 * when no longer needed.
 	 *
 	 * Since: 3.36
 	 */
-	signals[REQUEST_RESOURCE] = g_signal_new (
-		"request-resource",
+	signals[REF_MIME_PART] = g_signal_new (
+		"ref-mime-part",
 		E_TYPE_CONTENT_EDITOR,
-		G_SIGNAL_RUN_LAST,
-		G_STRUCT_OFFSET (EContentEditorInterface, request_resource),
+		G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+		G_STRUCT_OFFSET (EContentEditorInterface, ref_mime_part),
 		NULL, NULL,
 		NULL,
-		G_TYPE_NONE, 2,
-		G_TYPE_STRING,
-		G_TYPE_CANCELLABLE);
+		CAMEL_TYPE_MIME_PART, 1,
+		G_TYPE_STRING);
 }
 
 ESpellChecker *
@@ -1809,9 +1809,13 @@ e_content_editor_util_create_data_mimepart (const gchar *uri,
 		}
 
 	/* files on the disk */
-	} else if (g_ascii_strncasecmp (uri, "file://", 7) == 0) {
+	} else if (g_ascii_strncasecmp (uri, "file://", 7) == 0 ||
+		   g_ascii_strncasecmp (uri, "evo-file://", 11) == 0) {
 		GFileInputStream *file_stream;
 		GFile *file;
+
+		if (g_ascii_strncasecmp (uri, "evo-", 4) == 0)
+			uri += 4;
 
 		file = g_file_new_for_uri (uri);
 		file_stream = g_file_read (file, NULL, NULL);
@@ -1877,22 +1881,6 @@ e_content_editor_util_create_data_mimepart (const gchar *uri,
 	g_free (data);
 
 	return mime_part;
-}
-
-void
-e_content_editor_insert_image_from_mime_part (EContentEditor *editor,
-                                              CamelMimePart *part)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-	g_return_if_fail (part != NULL);
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->insert_image_from_mime_part != NULL);
-
-	iface->insert_image_from_mime_part (editor, part);
 }
 
 /**
@@ -3805,25 +3793,6 @@ e_content_editor_spell_check_prev_word (EContentEditor *editor,
 }
 
 void
-e_content_editor_resource_loaded (EContentEditor *editor,
-				  const gchar *uri,
-				  GInputStream *stream,
-				  gint64 stream_length,
-				  const gchar *mime_type,
-				  const GError *error)
-{
-	EContentEditorInterface *iface;
-
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-
-	iface = E_CONTENT_EDITOR_GET_IFACE (editor);
-	g_return_if_fail (iface != NULL);
-	g_return_if_fail (iface->resource_loaded != NULL);
-
-	iface->resource_loaded (editor, uri, stream, stream_length, mime_type, error);
-}
-
-void
 e_content_editor_emit_load_finished (EContentEditor *editor)
 {
 	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
@@ -3900,13 +3869,16 @@ e_content_editor_emit_content_changed (EContentEditor *editor)
 	g_signal_emit (editor, signals[CONTENT_CHANGED], 0);
 }
 
-void
-e_content_editor_emit_request_resource (EContentEditor *editor,
-					const gchar *uri,
-					GCancellable *cancellable)
+CamelMimePart *
+e_content_editor_emit_ref_mime_part (EContentEditor *editor,
+				     const gchar *uri)
 {
-	g_return_if_fail (E_IS_CONTENT_EDITOR (editor));
-	g_return_if_fail (uri != NULL);
+	CamelMimePart *mime_part = NULL;
 
-	g_signal_emit (editor, signals[REQUEST_RESOURCE], 0, uri, cancellable);
+	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), NULL);
+	g_return_val_if_fail (uri != NULL, NULL);
+
+	g_signal_emit (editor, signals[REF_MIME_PART], 0, uri, &mime_part);
+
+	return mime_part;
 }

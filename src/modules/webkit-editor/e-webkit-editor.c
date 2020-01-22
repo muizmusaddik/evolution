@@ -20,6 +20,7 @@
 
 #include "e-util/e-util.h"
 #include "composer/e-msg-composer.h"
+#include "mail/e-cid-request.h"
 #include "mail/e-http-request.h"
 
 #include <string.h>
@@ -76,8 +77,6 @@ struct _EWebKitEditorPrivate {
 	gpointer initialized_user_data;
 
 	GCancellable *cancellable;
-	EWebExtensionContainer *container;
-	GDBusProxy *web_extension_proxy;
 
 	gboolean html_mode;
 	gboolean changed;
@@ -184,14 +183,11 @@ typedef struct {
 } PostReloadOperation;
 
 static void e_webkit_editor_content_editor_init (EContentEditorInterface *iface);
+static void e_webkit_editor_cid_resolver_init (ECidResolverInterface *iface);
 
-G_DEFINE_TYPE_WITH_CODE (
-	EWebKitEditor,
-	e_webkit_editor,
-	WEBKIT_TYPE_WEB_VIEW,
-	G_IMPLEMENT_INTERFACE (
-		E_TYPE_CONTENT_EDITOR,
-		e_webkit_editor_content_editor_init));
+G_DEFINE_TYPE_WITH_CODE (EWebKitEditor, e_webkit_editor, WEBKIT_TYPE_WEB_VIEW,
+	G_IMPLEMENT_INTERFACE (E_TYPE_CONTENT_EDITOR, e_webkit_editor_content_editor_init)
+	G_IMPLEMENT_INTERFACE (E_TYPE_CID_RESOLVER, e_webkit_editor_cid_resolver_init));
 
 typedef struct _EWebKitEditorFlagClass {
 	GObjectClass parent_class;
@@ -1156,25 +1152,6 @@ dispatch_pending_operations (EWebKitEditor *wk_editor)
 	}
 }
 
-static guint64
-current_page_id (EWebKitEditor *wk_editor)
-{
-	return webkit_web_view_get_page_id (WEBKIT_WEB_VIEW (wk_editor));
-}
-
-static void
-webkit_editor_call_simple_extension_function (EWebKitEditor *wk_editor,
-                                              const gchar *method_name)
-{
-	/*guint64 page_id;
-
-	page_id = current_page_id (wk_editor);
-
-	e_web_extension_container_call_simple (wk_editor->priv->container, page_id, wk_editor->priv->stamp,
-		method_name, g_variant_new ("(t)", page_id));*/
-	printf ("%s: '%s'\n", __FUNCTION__, method_name);
-}
-
 static void
 webkit_editor_queue_post_reload_operation (EWebKitEditor *wk_editor,
                                            PostReloadOperationFunc func,
@@ -1215,21 +1192,10 @@ webkit_editor_initialize (EContentEditor *content_editor,
                           EContentEditorInitializedCallback callback,
                           gpointer user_data)
 {
-	EWebKitEditor *wk_editor;
-
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (content_editor));
 	g_return_if_fail (callback != NULL);
 
-	wk_editor = E_WEBKIT_EDITOR (content_editor);
-
-	if (wk_editor->priv->web_extension_proxy) {
-		callback (content_editor, user_data);
-	} else {
-		g_return_if_fail (wk_editor->priv->initialized_callback == NULL);
-
-		wk_editor->priv->initialized_callback = callback;
-		wk_editor->priv->initialized_user_data = user_data;
-	}
+	callback (content_editor, user_data);
 }
 
 static void
@@ -2071,48 +2037,15 @@ webkit_editor_insert_content (EContentEditor *editor,
 		return;
 	}
 
-	if (!wk_editor->priv->web_extension_proxy) {
-		/* If the operation needs a web extension and it is not ready yet
-		 * we need to schedule the current operation again a dispatch it
-		 * when the extension is ready */
-		if (!((flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
-		      (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) &&
-		      (strstr (content, "data-evo-draft") ||
-		       strstr (content, "data-evo-signature-plain-text-mode")))) {
-			webkit_editor_queue_post_reload_operation (
-				wk_editor,
-				(PostReloadOperationFunc) webkit_editor_insert_content,
-				g_strdup (content),
-				g_free,
-				flags);
-			return;
-		}
-	}
-
 	if ((flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
 	    !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {
-		/* e_html_editor_view_convert_and_insert_plain_text
-		   e_html_editor_view_convert_and_insert_html_to_plain_text
-		   e_html_editor_view_insert_text */
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMConvertAndInsertHTMLIntoSelection",
-			g_variant_new (
-				"(tsb)",
-				current_page_id (wk_editor),
-				content,
-				(flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML)),
-			wk_editor->priv->cancellable);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.PasteText(%s, %x, %x);",
+			content, (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) != 0, FALSE);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
 		   (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML)) {
 		if ((strstr (content, "data-evo-draft") ||
 		     strstr (content, "data-evo-signature-plain-text-mode"))) {
-			wk_editor->priv->reload_in_progress = TRUE;
-			e_webkit_editor_load_data (wk_editor, content);
-			return;
-		}
-
-		if (strstr (content, "data-evo-draft") && !(wk_editor->priv->html_mode)) {
 			wk_editor->priv->reload_in_progress = TRUE;
 			e_webkit_editor_load_data (wk_editor, content);
 			return;
@@ -2135,43 +2068,30 @@ webkit_editor_insert_content (EContentEditor *editor,
 		e_webkit_editor_load_data (wk_editor, content);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
 		   (flags & E_CONTENT_EDITOR_INSERT_TEXT_PLAIN)) {
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMConvertContent",
-			g_variant_new ("(tsnn)", current_page_id (wk_editor), content,
-				e_webkit_editor_three_state_to_bool (e_content_editor_get_start_bottom (editor), "composer-reply-start-bottom"),
-				e_webkit_editor_three_state_to_bool (e_content_editor_get_top_signature (editor), "composer-top-signature")),
-			wk_editor->priv->cancellable);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.ConvertContent(%s, %x, %x);",
+			content,
+			e_webkit_editor_three_state_to_bool (e_content_editor_get_start_bottom (editor), "composer-reply-start-bottom"),
+			e_webkit_editor_three_state_to_bool (e_content_editor_get_top_signature (editor), "composer-top-signature"));
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
-		    !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
-		    !(flags & E_CONTENT_EDITOR_INSERT_QUOTE_CONTENT)) {
-		/* e_html_editor_view_paste_as_text */
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMConvertAndInsertHTMLIntoSelection",
-			g_variant_new (
-				"(tsb)", current_page_id (wk_editor), content, TRUE),
-			wk_editor->priv->cancellable);
+		  !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
+		  !(flags & E_CONTENT_EDITOR_INSERT_QUOTE_CONTENT)) {
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.PasteText(%s, %x, %x);",
+			content, TRUE, FALSE);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_QUOTE_CONTENT) &&
 		   !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {
-		/* e_html_editor_view_paste_clipboard_quoted */
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMQuoteAndInsertTextIntoSelection",
-			g_variant_new (
-				"(tsb)", current_page_id (wk_editor), content, (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) != 0),
-			wk_editor->priv->cancellable);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.PasteText(%s, %x, %x);",
+			content, (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) != 0, TRUE);
 	} else if (!(flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
 		   !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {
-		/* e_html_editor_view_insert_html */
-		e_util_invoke_g_dbus_proxy_call_with_error_check (
-			wk_editor->priv->web_extension_proxy,
-			"DOMInsertHTML",
-			g_variant_new (
-				"(ts)", current_page_id (wk_editor), content),
-			wk_editor->priv->cancellable);
-	} else
-		g_warning ("Unsupported flags combination (%d) in (%s)", flags, G_STRFUNC);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.InsertHTML(%s, %s);",
+			"InsertHTML", content);
+	} else {
+		g_warning ("%s: Unsupported flags combination (0x%x)", G_STRFUNC, flags);
+	}
 }
 
 static void
@@ -2286,10 +2206,15 @@ webkit_editor_get_content_finish (EContentEditor *editor,
 							cid = e_web_view_jsc_get_object_property_string (item_value, "cid", NULL);
 
 							if (src && *src && cid && *cid) {
-								CamelMimePart *part;
+								CamelMimePart *part = NULL;
 
-								part = e_content_editor_util_create_data_mimepart (src, cid, TRUE, NULL, NULL,
-									E_WEBKIT_EDITOR (editor)->priv->cancellable);
+								if (g_ascii_strncasecmp (src, "cid:", 4) == 0)
+									part = e_content_editor_emit_ref_mime_part (editor, src);
+
+								if (!part) {
+									part = e_content_editor_util_create_data_mimepart (src, cid, TRUE, NULL, NULL,
+										E_WEBKIT_EDITOR (editor)->priv->cancellable);
+								}
 
 								if (part)
 									image_parts = g_slist_prepend (image_parts, part);
@@ -2417,64 +2342,6 @@ webkit_editor_insert_emoticon (EContentEditor *editor,
 }
 
 static void
-webkit_editor_insert_image_from_mime_part (EContentEditor *editor,
-                                           CamelMimePart *part)
-{
-	CamelDataWrapper *dw;
-	CamelStream *stream;
-	EWebKitEditor *wk_editor;
-	GByteArray *byte_array;
-	gchar *src, *base64_encoded, *mime_type, *cid_uri;
-	const gchar *cid, *name;
-
-	wk_editor = E_WEBKIT_EDITOR (editor);
-	if (!wk_editor->priv->web_extension_proxy) {
-		printf ("EHTMLEditorWebExtension not ready at %s!\n", G_STRFUNC);
-		return;
-	}
-
-	dw = camel_medium_get_content (CAMEL_MEDIUM (part));
-	g_return_if_fail (dw);
-
-	stream = camel_stream_mem_new ();
-	camel_data_wrapper_decode_to_stream_sync (dw, stream, NULL, NULL);
-	camel_stream_close (stream, NULL, NULL);
-
-	byte_array = camel_stream_mem_get_byte_array (CAMEL_STREAM_MEM (stream));
-
-	if (!byte_array->data) {
-		g_object_unref (stream);
-		return;
-	}
-
-	base64_encoded = g_base64_encode ((const guchar *) byte_array->data, byte_array->len);
-
-	mime_type = camel_data_wrapper_get_mime_type (dw);
-	name = camel_mime_part_get_filename (part);
-	/* Insert file name before new src */
-	src = g_strconcat (name ? name : "", name ? ";data:" : "", mime_type, ";base64,", base64_encoded, NULL);
-
-	cid = camel_mime_part_get_content_id (part);
-	if (!cid) {
-		camel_mime_part_set_content_id (part, NULL);
-		cid = camel_mime_part_get_content_id (part);
-	}
-	cid_uri = g_strdup_printf ("cid:%s", cid);
-
-	e_util_invoke_g_dbus_proxy_call_with_error_check (
-		wk_editor->priv->web_extension_proxy,
-		"DOMAddNewInlineImageIntoList",
-		g_variant_new ("(tsss)", current_page_id (wk_editor), name ? name : "", cid_uri, src),
-		wk_editor->priv->cancellable);
-
-	g_free (base64_encoded);
-	g_free (mime_type);
-	g_free (cid_uri);
-	g_free (src);
-	g_object_unref (stream);
-}
-
-static void
 webkit_editor_select_all (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
@@ -2488,11 +2355,15 @@ webkit_editor_select_all (EContentEditor *editor)
 static void
 webkit_editor_selection_wrap (EContentEditor *editor)
 {
-	EWebKitEditor *wk_editor;
+	/*EWebKitEditor *wk_editor;
+	guint64 page_id;
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	webkit_editor_call_simple_extension_function (wk_editor, "DOMSelectionWrap");
+	page_id = current_page_id (wk_editor);		
+
+	e_web_extension_container_call_simple (wk_editor->priv->web_extension_proxy, page_id, wk_editor->priv->stamp,
+		"DOMSelectionWrap", g_variant_new ("(t)", page_id));*/
 }
 
 static gboolean
@@ -4162,15 +4033,20 @@ webkit_editor_constructed (GObject *object)
 	webkit_web_context_set_spell_checking_languages (web_context, (const gchar * const *) languages);
 	g_strfreev (languages);
 
-	content_request = e_http_request_new ();
-	webkit_web_context_register_uri_scheme (web_context, "evo-http", webkit_editor_process_uri_request_cb,
-		g_object_ref (content_request), g_object_unref);
-	webkit_web_context_register_uri_scheme (web_context, "evo-https", webkit_editor_process_uri_request_cb,
+	content_request = e_cid_request_new ();
+	webkit_web_context_register_uri_scheme (web_context, "cid", webkit_editor_process_uri_request_cb,
 		g_object_ref (content_request), g_object_unref);
 	g_object_unref (content_request);
 
 	content_request = e_file_request_new ();
 	webkit_web_context_register_uri_scheme (web_context, "evo-file", webkit_editor_process_uri_request_cb,
+		g_object_ref (content_request), g_object_unref);
+	g_object_unref (content_request);
+
+	content_request = e_http_request_new ();
+	webkit_web_context_register_uri_scheme (web_context, "evo-http", webkit_editor_process_uri_request_cb,
+		g_object_ref (content_request), g_object_unref);
+	webkit_web_context_register_uri_scheme (web_context, "evo-https", webkit_editor_process_uri_request_cb,
 		g_object_ref (content_request), g_object_unref);
 	g_object_unref (content_request);
 
@@ -5213,6 +5089,15 @@ paste_primary_clipboard_quoted (EContentEditor *editor)
        }
 }
 
+static CamelMimePart *
+e_webkit_editor_cid_resolver_ref_part (ECidResolver *resolver,
+				       const gchar *cid_uri)
+{
+	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (resolver), NULL);
+
+	return e_content_editor_emit_ref_mime_part (E_CONTENT_EDITOR (resolver), cid_uri);
+}
+
 static gboolean
 webkit_editor_button_press_event (GtkWidget *widget,
                                   GdkEventButton *event)
@@ -5556,7 +5441,6 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->get_content = webkit_editor_get_content;
 	iface->get_content_finish = webkit_editor_get_content_finish;
 	iface->insert_image = webkit_editor_insert_image;
-	iface->insert_image_from_mime_part = webkit_editor_insert_image_from_mime_part;
 	iface->insert_emoticon = webkit_editor_insert_emoticon;
 	iface->move_caret_on_coordinates = webkit_editor_move_caret_on_coordinates;
 	iface->cut = webkit_editor_cut;
@@ -5674,4 +5558,11 @@ e_webkit_editor_content_editor_init (EContentEditorInterface *iface)
 	iface->table_set_background_color = webkit_editor_table_set_background_color;
 	iface->spell_check_next_word = webkit_editor_spell_check_next_word;
 	iface->spell_check_prev_word = webkit_editor_spell_check_prev_word;
+}
+
+static void
+e_webkit_editor_cid_resolver_init (ECidResolverInterface *iface)
+{
+	iface->ref_part = e_webkit_editor_cid_resolver_ref_part;
+	/* iface->dup_mime_type = e_webkit_editor_cid_resolver_dup_mime_part; - not needed here */
 }
