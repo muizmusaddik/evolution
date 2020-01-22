@@ -3739,6 +3739,10 @@ EvoEditor.PasteText = function(text, isHTML, quote)
 {
 }
 
+EvoEditor.WrapSelection = function()
+{
+}
+
 EvoEditor.onContextMenu = function(event)
 {
 	var node = event.target;

@@ -2346,6 +2346,8 @@ webkit_editor_select_all (EContentEditor *editor)
 {
 	EWebKitEditor *wk_editor;
 
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
+
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
 	webkit_web_view_execute_editing_command (
@@ -2355,15 +2357,14 @@ webkit_editor_select_all (EContentEditor *editor)
 static void
 webkit_editor_selection_wrap (EContentEditor *editor)
 {
-	/*EWebKitEditor *wk_editor;
-	guint64 page_id;
+	EWebKitEditor *wk_editor;
+
+	g_return_if_fail (E_IS_WEBKIT_EDITOR (editor));
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	page_id = current_page_id (wk_editor);		
-
-	e_web_extension_container_call_simple (wk_editor->priv->web_extension_proxy, page_id, wk_editor->priv->stamp,
-		"DOMSelectionWrap", g_variant_new ("(t)", page_id));*/
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.WrapSelection();");
 }
 
 static gboolean
