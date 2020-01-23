@@ -495,6 +495,15 @@ EvoEditor.ForeachChild = function(parent, firstChildIndex, lastChildIndex, trave
 	return EvoEditor.foreachChildRecur(parent, parent, firstChildIndex, lastChildIndex, traversar);
 }
 
+EvoEditor.GetParentBlockNode = function(node)
+{
+	while (node && !EvoEditor.IsBlockNode(node) && node.tagName != "BODY") {
+		node = node.parentElement;
+	}
+
+	return node;
+}
+
 EvoEditor.GetCommonParent = function(firstNode, secondNode, longPath)
 {
 	if (!firstNode || !secondNode) {
@@ -3739,8 +3748,240 @@ EvoEditor.PasteText = function(text, isHTML, quote)
 {
 }
 
+EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, currentPar, usedLetters)
+{
+	var child = paragraphNode.firstChild, nextChild, appendBR;
+
+	while (child) {
+		appendBR = false;
+
+		if (child.nodeType == child.TEXT_NODE) {
+			var text = child.nodeValue;
+
+			// merge consecutive text nodes into one (similar to paragraphNode.normalize())
+			while (child.nextSibling && child.nextSibling.nodeType == child.TEXT_NODE) {
+				nextChild = child.nextSibling;
+				text += nextChild.nodeValue;
+
+				selectionUpdater.beforeRemove(child);
+				child.parentElement.removeChild(child);
+				selectionUpdater.afterRemove(nextChild);
+
+				child = nextChild;
+			}
+
+			while (text.length + usedLetters > maxLetters) {
+				var spacePos = text.lastIndexOf(" ", maxLetters - usedLetters);
+
+				if (spacePos < 0)
+					spacePos = text.indexOf(" ");
+
+				if (spacePos > 0) {
+					var textNode = document.createTextNode((usedLetters > 0 ? " " : "") + text.substr(0, spacePos));
+
+					if (currentPar)
+						currentPar.appendChild(textNode);
+					else
+						child.parentElement.insertBefore(textNode, child);
+
+					text = text.substr(spacePos + 1);
+				}
+
+				if (currentPar)
+					currentPar.appendChild(document.createElement("BR"));
+				else
+					child.parentElement.insertBefore(document.createElement("BR"), child);
+
+				usedLetters = 0;
+
+				if (spacePos == 0)
+					text = text.substr(1);
+				else if (spacePos < 0)
+					break;
+			}
+
+			child.nodeValue = (usedLetters > 0 ? " " : "") + text;
+			usedLetters += text.length;
+
+			if (usedLetters > maxLetters)
+				appendBR = true;
+		} else if (child.tagName == "BR") {
+			if (!child.nextSibling) {
+				return -1;
+			}
+
+			if (child.nextSibling.tagName == "BR") {
+				usedLetters = 0;
+
+				if (currentPar) {
+					var nextSibling = child.nextSibling;
+
+					nextChild = child.nextSibling.nextSibling;
+
+					currentPar.appendChild(child);
+
+					if (usedLetters) {
+						currentPar.appendChild(nextSibling);
+					} else {
+						selectionUpdater.beforeRemove(nextSibling);
+
+						nextSibling.parentElement.removeChild(nextSibling);
+
+						selectionUpdater.afterRemove(nextChild ? nextChild : paragraphElement);
+					}
+
+					child = nextChild;
+					continue;
+				}
+			} else {
+				nextChild = child.nextSibling;
+
+				selectionUpdater.beforeRemove(child);
+				child.parentElement.removeChild(child);
+				selectionUpdater.afterRemove(nextChild ? nextChild : paragraphElement);
+
+				child = nextChild;
+				continue;
+			}
+		} else if (child.tagName == "IMG") {
+			// just skip it, do not count it into the line length
+		} else if (child.tagName == "B" ||
+			   child.tagName == "I" ||
+			   child.tagName == "U" ||
+			   child.tagName == "S" ||
+			   child.tagName == "SUB" ||
+			   child.tagName == "SUP" ||
+			   child.tagName == "FONT" ||
+			   child.tagName == "SPAN" ||
+			   child.tagName == "A") {
+		} else if (child.nodeType == child.ELEMENT_NODE) {
+			// everything else works like a line stopper, with a new line added after it
+			appendBR = true;
+		}
+
+		nextChild = child.nextSibling;
+
+		if (currentPar)
+			currentPar.appendChild(child);
+
+		if (appendBR) {
+			usedLetters = 0;
+
+			if (nextChild) {
+				if (currentPar)
+					currentPar.appendChild(document.createElement("BR"));
+				else
+					nextChild.parentElement.insertBefore(document.createElement("BR"), nextChild);
+			}
+		}
+
+		child = nextChild;
+	}
+
+	return usedLetters;
+}
+
 EvoEditor.WrapSelection = function()
 {
+	var nodeFrom, nodeTo;
+
+	nodeFrom = EvoEditor.GetParentBlockNode(document.getSelection().baseNode);
+	nodeTo = EvoEditor.GetParentBlockNode(document.getSelection().extentNode);
+
+	if (!nodeFrom || !nodeTo) {
+		return;
+	}
+
+	if (nodeFrom != nodeTo) {
+		// selection can go from top to bottom, but also from bottom to top; normalize the path order
+		var commonParent = EvoEditor.GetCommonParent(nodeFrom, nodeTo, true), childFrom, childTo, ii, sz;
+
+		childFrom = nodeFrom;
+		while (childFrom && childFrom != commonParent && childFrom.parentElement != commonParent) {
+			childFrom = childFrom.parentElement;
+		}
+
+		childTo = nodeTo;
+		while (childTo && childTo != commonParent && childTo.parentElement != commonParent) {
+			childTo = childTo.parentElement;
+		}
+
+		if (!childFrom || !childTo) {
+			throw "EvoEditor.WrapSelection: Should not be reached (childFrom and childTo cannot be NULL)";
+		}
+
+		sz = commonParent.children.length;
+		for (ii = 0; ii < sz; ii++) {
+			if (commonParent.children[ii] === childFrom) {
+				nodeFrom = childFrom;
+				nodeTo = childTo;
+				break;
+			} else if (commonParent.children[ii] === childTo) {
+				nodeFrom = childTo;
+				nodeTo = childFrom;
+				break;
+			}
+		}
+	}
+
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "WrapSelection", nodeFrom, nodeTo, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+	try {
+		var selectionUpdater = EvoSelection.CreateUpdaterObject();
+		var maxLetters, usedLetters, currentPar, lastParTagName = nodeFrom.tagName;
+
+		maxLetters = EvoEditor.NORMAL_PARAGRAPH_WIDTH;
+		usedLetters = 0;
+		currentPar = null;
+
+		while (nodeFrom) {
+			if (lastParTagName != nodeFrom.tagName) {
+				lastParTagName = nodeFrom.tagName;
+				currentPar = null;
+				usedLetters = 0;
+			}
+
+			if (nodeFrom.tagName == "DIV" || nodeFrom.tagName == "P" || nodeFrom.tagName == "PRE") {
+				if (nodeFrom.childNodes.length == 1 && nodeFrom.childNodes[0].tagName == "BR") {
+					currentPar = null;
+					usedLetters = 0;
+				} else {
+					usedLetters = EvoEditor.wrapParagraph(selectionUpdater, nodeFrom, maxLetters, currentPar, usedLetters);
+
+					if (usedLetters == -1) {
+						currentPar = null;
+						usedLetters = 0;
+					} else if (!currentPar) {
+						currentPar = nodeFrom;
+					}
+				}
+			}
+
+			// cannot break it now, because want to delete the last empty paragraph
+			var done = nodeFrom === nodeTo;
+
+			if (!nodeFrom.childNodes.length) {
+				var node = nodeFrom;
+
+				selectionUpdater.beforeRemove(nodeFrom);
+
+				nodeFrom = nodeFrom.nextSibling;
+
+				selectionUpdater.afterRemove(nodeFrom ? nodeFrom : nodeFrom.parentElement);
+
+				if (node.parentElement)
+					node.parentElement.removeChild(node);
+			} else {
+				nodeFrom = nodeFrom.nextSibling;
+			}
+
+			if (done)
+				break;
+		}
+
+		selectionUpdater.restore();
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "WrapSelection");
+	}
 }
 
 EvoEditor.onContextMenu = function(event)
