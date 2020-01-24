@@ -3755,7 +3755,7 @@ EvoEditor.PasteText = function(text, isHTML, quote)
 {
 }
 
-EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, currentPar, usedLetters)
+EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLetters)
 {
 	var child = paragraphNode.firstChild, nextChild, appendBR;
 
@@ -3770,9 +3770,7 @@ EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, 
 				nextChild = child.nextSibling;
 				text += nextChild.nodeValue;
 
-				selectionUpdater.beforeRemove(child);
 				child.parentElement.removeChild(child);
-				selectionUpdater.afterRemove(nextChild);
 
 				child = nextChild;
 			}
@@ -3830,11 +3828,7 @@ EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, 
 					if (usedLetters) {
 						currentPar.appendChild(nextSibling);
 					} else {
-						selectionUpdater.beforeRemove(nextSibling);
-
 						nextSibling.parentElement.removeChild(nextSibling);
-
-						selectionUpdater.afterRemove(nextChild ? nextChild : paragraphElement);
 					}
 
 					child = nextChild;
@@ -3843,9 +3837,7 @@ EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, 
 			} else {
 				nextChild = child.nextSibling;
 
-				selectionUpdater.beforeRemove(child);
 				child.parentElement.removeChild(child);
-				selectionUpdater.afterRemove(nextChild ? nextChild : paragraphElement);
 
 				child = nextChild;
 				continue;
@@ -3933,7 +3925,6 @@ EvoEditor.WrapSelection = function()
 
 	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "WrapSelection", nodeFrom, nodeTo, EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 	try {
-		var selectionUpdater = EvoSelection.CreateUpdaterObject();
 		var maxLetters, usedLetters, currentPar, lastParTagName = nodeFrom.tagName;
 
 		maxLetters = EvoEditor.NORMAL_PARAGRAPH_WIDTH;
@@ -3952,7 +3943,7 @@ EvoEditor.WrapSelection = function()
 					currentPar = null;
 					usedLetters = 0;
 				} else {
-					usedLetters = EvoEditor.wrapParagraph(selectionUpdater, nodeFrom, maxLetters, currentPar, usedLetters);
+					usedLetters = EvoEditor.wrapParagraph(nodeFrom, maxLetters, currentPar, usedLetters);
 
 					if (usedLetters == -1) {
 						currentPar = null;
@@ -3969,11 +3960,7 @@ EvoEditor.WrapSelection = function()
 			if (!nodeFrom.childNodes.length) {
 				var node = nodeFrom;
 
-				selectionUpdater.beforeRemove(nodeFrom);
-
 				nodeFrom = nodeFrom.nextSibling;
-
-				selectionUpdater.afterRemove(nodeFrom ? nodeFrom : node.parentElement);
 
 				if (node.parentElement)
 					node.parentElement.removeChild(node);
@@ -3985,7 +3972,15 @@ EvoEditor.WrapSelection = function()
 				break;
 		}
 
-		selectionUpdater.restore();
+		// Place the cursor at the end of the wrapped paragraph(s)
+		if (currentPar)
+			nodeTo = currentPar;
+
+		while (nodeTo.lastChild) {
+			nodeTo = nodeTo.lastChild;
+		}
+
+		document.getSelection().setPosition(nodeTo, nodeTo.nodeType == nodeTo.TEXT_NODE ? nodeTo.nodeValue.length : 0);
 	} finally {
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "WrapSelection");
 	}
