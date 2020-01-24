@@ -1192,10 +1192,21 @@ webkit_editor_initialize (EContentEditor *content_editor,
                           EContentEditorInitializedCallback callback,
                           gpointer user_data)
 {
+	EWebKitEditor *wk_editor;
+
 	g_return_if_fail (E_IS_WEBKIT_EDITOR (content_editor));
 	g_return_if_fail (callback != NULL);
 
-	callback (content_editor, user_data);
+	wk_editor = E_WEBKIT_EDITOR (content_editor);
+
+	if (wk_editor->priv->webkit_load_event == WEBKIT_LOAD_FINISHED) {
+		callback (content_editor, user_data);
+	} else {
+		g_return_if_fail (wk_editor->priv->initialized_callback == NULL);
+
+		wk_editor->priv->initialized_callback = callback;
+		wk_editor->priv->initialized_user_data = user_data;
+	}
 }
 
 static void

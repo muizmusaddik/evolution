@@ -352,12 +352,14 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 			useWrapWidth : wrapWidth,
 			spacesFrom : -1, // in 'str'
 			lastSpace : -1, // in this->line
+			lastWasWholeLine : false, // to distinguish between new line in the text and new line from wrapping with while line text
 			lineLetters : 0,
 			line : "",
 
 			shouldWrap : function() {
 				return worker.canWrap && (worker.lineLetters > worker.useWrapWidth || (
-					worker.lineLetters == worker.useWrapWidth && worker.lastSpace == -1));
+					worker.lineLetters == worker.useWrapWidth && (
+					worker.lastSpace == -1/* || worker.lastSpace == worker.line.length*/)));
 			},
 
 			commitSpaces : function(ii) {
@@ -405,13 +407,19 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 
 					lines[lines.length] = worker.line.substr(0, jj);
 					worker.line = worker.line.substr(jj);
+				} else if (worker.lastWasWholeLine && worker.line == "") {
+					worker.lastWasWholeLine = false;
 				} else {
 					lines[lines.length] = worker.line;
 					worker.line = "";
+					worker.lastWasWholeLine = true;
 				}
 
 				if (worker.canWrap && worker.collapseWhiteSpace && lines[lines.length - 1].endsWith(" ")) {
-					lines[lines.length - 1] = lines[lines.length - 1].substr(0, lines[lines.length - 1].length - 1);
+					if (lines[lines.length - 1].length == 1)
+						lines.length = lines.length - 1;
+					else
+						lines[lines.length - 1] = lines[lines.length - 1].substr(0, lines[lines.length - 1].length - 1);
 				}
 
 				worker.lineLetters = worker.canWrap ? EvoConvert.calcLineLetters(worker.line) : worker.line.length;
@@ -449,13 +457,18 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 				worker.line += add;
 				worker.lineLetters += add.length;
 			} else if (!worker.charWrap && (chr == " " || chr == "\t")) {
-				if (chr == '\t')
+				var setSpacesFrom = false;
+
+				if (chr == '\t') {
 					worker.lineLetters = worker.lineLetters - (worker.lineLetters % EvoConvert.TAB_WIDTH) + EvoConvert.TAB_WIDTH;
-				else if (worker.spacesFrom == -1 || !worker.collapseWhiteSpace)
+					setSpacesFrom = true;
+				} else if ((worker.spacesFrom == -1 && worker.line != "") || !worker.collapseWhiteSpace) {
 					worker.lineLetters++;
+					setSpacesFrom = true;
+				}
 
 				// all spaces at the end of paragraph line are ignored
-				if (worker.spacesFrom == -1)
+				if (setSpacesFrom && worker.spacesFrom == -1)
 					worker.spacesFrom = ii;
 			} else {
 				worker.commitSpaces(ii);

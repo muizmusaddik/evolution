@@ -230,6 +230,7 @@ test_utils_web_process_crashed_cb (WebKitWebView *web_view,
 typedef struct _CreateData {
 	gpointer async_data;
 	TestFixture *fixture;
+	gboolean created;
 } CreateData;
 
 static void
@@ -244,6 +245,8 @@ test_utils_html_editor_created_cb (GObject *source_object,
 	GError *error = NULL;
 
 	g_return_if_fail (create_data != NULL);
+
+	create_data->created = TRUE;
 
 	fixture = create_data->fixture;
 
@@ -326,6 +329,8 @@ test_utils_add_test (const gchar *name,
 		test_utils_fixture_set_up, (ETestFixtureFunc) func, test_utils_fixture_tear_down);
 }
 
+static void test_utils_async_call_free (gpointer async_data);
+
 void
 test_utils_fixture_set_up (TestFixture *fixture,
 			   gconstpointer user_data)
@@ -343,10 +348,14 @@ test_utils_fixture_set_up (TestFixture *fixture,
 
 	create_data.async_data = test_utils_async_call_prepare ();
 	create_data.fixture = fixture;
+	create_data.created = FALSE;
 
 	e_html_editor_new (test_utils_html_editor_created_cb, &create_data);
 
-	test_utils_async_call_wait (create_data.async_data, 60);
+	if (create_data.created)
+		test_utils_async_call_free (create_data.async_data);
+	else
+		test_utils_async_call_wait (create_data.async_data, 60);
 
 	g_warn_if_fail (fixture->editor != NULL);
 	g_warn_if_fail (E_IS_HTML_EDITOR (fixture->editor));
@@ -459,6 +468,16 @@ test_utils_flush_main_context (void)
 	}
 }
 
+static void
+test_utils_async_call_free (gpointer async_data)
+{
+	GMainLoop *loop = async_data;
+
+	test_utils_flush_main_context ();
+
+	g_main_loop_unref (loop);
+}
+
 gpointer
 test_utils_async_call_prepare (void)
 {
@@ -514,9 +533,7 @@ test_utils_async_call_wait (gpointer async_data,
 		g_source_unref (source);
 	}
 
-	test_utils_flush_main_context ();
-
-	g_main_loop_unref (loop);
+	test_utils_async_call_free (async_data);
 
 	return !async_call_data.timeout_reached;
 }

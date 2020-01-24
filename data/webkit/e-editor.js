@@ -2254,6 +2254,13 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		return;
 	}
 
+	// make sure there's always a DIV in the body (like after 'select all' followed by 'delete')
+	if (!document.body.childNodes.length || (document.body.childNodes.length == 1 && document.body.childNodes[0].tagName == "BR")) {
+		document.execCommand("insertHTML", false, "<div><br></div>");
+		EvoUndoRedo.GroupTopRecords(2, inputEvent.inputType + "::fillEmptyBody");
+		return;
+	}
+
 	if ((!isInsertParagraph && inputEvent.inputType != "insertText") ||
 	    (!(EvoEditor.MAGIC_LINKS && (isWordDelim || isInsertParagraph)) &&
 	    !EvoEditor.MAGIC_SMILEYS)) {
@@ -3776,7 +3783,7 @@ EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, 
 				if (spacePos < 0)
 					spacePos = text.indexOf(" ");
 
-				if (spacePos > 0) {
+				if (spacePos > 0 && (!usedLetters || usedLetters + spacePos <= maxLetters)) {
 					var textNode = document.createTextNode((usedLetters > 0 ? " " : "") + text.substr(0, spacePos));
 
 					if (currentPar)
@@ -3801,7 +3808,7 @@ EvoEditor.wrapParagraph = function(selectionUpdater, paragraphNode, maxLetters, 
 			}
 
 			child.nodeValue = (usedLetters > 0 ? " " : "") + text;
-			usedLetters += text.length;
+			usedLetters += (usedLetters > 0 ? 1 : 0) + text.length;
 
 			if (usedLetters > maxLetters)
 				appendBR = true;
@@ -3966,7 +3973,7 @@ EvoEditor.WrapSelection = function()
 
 				nodeFrom = nodeFrom.nextSibling;
 
-				selectionUpdater.afterRemove(nodeFrom ? nodeFrom : nodeFrom.parentElement);
+				selectionUpdater.afterRemove(nodeFrom ? nodeFrom : node.parentElement);
 
 				if (node.parentElement)
 					node.parentElement.removeChild(node);

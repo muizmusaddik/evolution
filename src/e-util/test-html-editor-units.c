@@ -899,8 +899,10 @@ test_list_indent_same (TestFixture *fixture,
 		"type:c\\n\n"
 		"type:d\\n\n"
 		"seq:nb\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing all items */
 
@@ -919,8 +921,10 @@ test_list_indent_same (TestFixture *fixture,
 		"a\n"
 		"b\n"
 		"c\n"
-		"d\n"))
+		"d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -946,8 +950,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - a\n"
 		"    - b\n"
 		"    - c\n"
-		"    - d\n"))
+		"    - d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -956,8 +962,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -966,8 +974,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first item, single select */
 
@@ -988,8 +998,10 @@ test_list_indent_same (TestFixture *fixture,
 		"a\n"
 		" * b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1013,8 +1025,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - a\n"
 		" * b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1023,8 +1037,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1033,8 +1049,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid item, single select */
 
@@ -1057,8 +1075,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		"b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1082,8 +1102,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		"    - b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1092,8 +1114,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1102,8 +1126,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last item, single select */
 
@@ -1124,8 +1150,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		" * c\n"
-		"d\n"))
+		"d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1149,8 +1177,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		" * c\n"
-		"    - d\n"))
+		"    - d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1159,8 +1189,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1169,8 +1201,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first items, multi-select */
 
@@ -1191,8 +1225,10 @@ test_list_indent_same (TestFixture *fixture,
 		"a\n"
 		"b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1216,8 +1252,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - a\n"
 		"    - b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1226,8 +1264,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1236,8 +1276,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid items, multi-select */
 
@@ -1260,8 +1302,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		"b\n"
 		"c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1285,8 +1329,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		"    - b\n"
 		"    - c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1295,8 +1341,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1305,8 +1353,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last items, multi-select */
 
@@ -1327,8 +1377,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		"c\n"
-		"d\n"))
+		"d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1352,8 +1404,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		"    - c\n"
-		"    - d\n"))
+		"    - d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1362,8 +1416,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1372,8 +1428,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* The same tests as above, only with added text above and below the list */
 
@@ -1411,8 +1469,10 @@ test_list_indent_same (TestFixture *fixture,
 		"action:style-preformat\n"
 		"type:suffix\n"
 		"seq:u\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing all items */
 
@@ -1435,8 +1495,10 @@ test_list_indent_same (TestFixture *fixture,
 		"b\n"
 		"c\n"
 		"d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1466,8 +1528,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - b\n"
 		"    - c\n"
 		"    - d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1476,8 +1540,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1486,8 +1552,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first item, single select */
 
@@ -1512,8 +1580,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1541,8 +1611,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1551,8 +1623,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1561,8 +1635,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid item, single select */
 
@@ -1589,8 +1665,10 @@ test_list_indent_same (TestFixture *fixture,
 		"b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1618,8 +1696,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1628,8 +1708,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1638,8 +1720,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last item, single select */
 
@@ -1664,8 +1748,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		" * c\n"
 		"d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1693,8 +1779,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		" * c\n"
 		"    - d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1703,8 +1791,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1713,8 +1803,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first items, multi-select */
 
@@ -1739,8 +1831,10 @@ test_list_indent_same (TestFixture *fixture,
 		"b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1768,8 +1862,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - b\n"
 		" * c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1778,8 +1874,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1788,8 +1886,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid items, multi-select */
 
@@ -1816,8 +1916,10 @@ test_list_indent_same (TestFixture *fixture,
 		"b\n"
 		"c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1845,8 +1947,10 @@ test_list_indent_same (TestFixture *fixture,
 		"    - b\n"
 		"    - c\n"
 		" * d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1855,8 +1959,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1865,8 +1971,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test:2\n"
 		"undo:drop:2\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last items, multi-select */
 
@@ -1891,8 +1999,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		"c\n"
 		"d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1920,8 +2030,10 @@ test_list_indent_same (TestFixture *fixture,
 		" * b\n"
 		"    - c\n"
 		"    - d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -1930,8 +2042,10 @@ test_list_indent_same (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:test:2\n"
@@ -1994,8 +2108,10 @@ test_list_indent_different (TestFixture *fixture,
 		"type:c\\n\n"
 		"type:d\\n\n"
 		"seq:nb\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first item, single select */
 
@@ -2016,8 +2132,10 @@ test_list_indent_different (TestFixture *fixture,
 		"      1. a\n"
 		" * b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2038,8 +2156,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   1. a\n"
 		" * b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2049,8 +2169,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid item, single select */
 
@@ -2071,8 +2193,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		"      A. b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2095,8 +2219,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		"   A. b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2106,8 +2232,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last item, single select */
 
@@ -2128,8 +2256,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		" * c\n"
-		"      I. d\n"))
+		"      I. d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2150,8 +2280,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		" * c\n"
-		"   I. d\n"))
+		"   I. d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2161,8 +2293,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first items, multi-select */
 
@@ -2185,8 +2319,10 @@ test_list_indent_different (TestFixture *fixture,
 		"      1. a\n"
 		"      2. b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2209,8 +2345,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   1. a\n"
 		"   2. b\n"
 		" * c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2220,8 +2358,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid items, multi-select */
 
@@ -2244,8 +2384,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		"      A. b\n"
 		"      B. c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2270,8 +2412,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		"   A. b\n"
 		"   B. c\n"
-		" * d\n"))
+		" * d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2281,8 +2425,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last items, multi-select */
 
@@ -2305,8 +2451,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		"      I. c\n"
-		"     II. d\n"))
+		"     II. d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2329,8 +2477,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * a\n"
 		" * b\n"
 		"   I. c\n"
-		"  II. d\n"))
+		"  II. d\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2340,8 +2490,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* The same tests as above, only with added text above and below the list */
 
@@ -2379,8 +2531,10 @@ test_list_indent_different (TestFixture *fixture,
 		"action:style-preformat\n"
 		"type:suffix\n"
 		"seq:ur\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first item, single select */
 
@@ -2405,8 +2559,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   1. b\n"
 		"   2. c\n"
 		"   3. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2431,8 +2587,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   1. b\n"
 		"   2. c\n"
 		"   3. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2442,8 +2600,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid item, single select */
 
@@ -2468,8 +2628,10 @@ test_list_indent_different (TestFixture *fixture,
 		"         A. b\n"
 		"   2. c\n"
 		"   3. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2496,8 +2658,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   A. b\n"
 		"   1. c\n"
 		"   2. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2507,8 +2671,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last item, single select */
 
@@ -2533,8 +2699,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   2. b\n"
 		"   3. c\n"
 		"         I. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2559,8 +2727,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   2. b\n"
 		"   3. c\n"
 		"   I. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2570,8 +2740,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing first items, multi-select */
 
@@ -2598,8 +2770,10 @@ test_list_indent_different (TestFixture *fixture,
 		"       - b\n"
 		"   1. c\n"
 		"   2. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2626,8 +2800,10 @@ test_list_indent_different (TestFixture *fixture,
 		" * b\n"
 		"   1. c\n"
 		"   2. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2637,8 +2813,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing mid items, multi-select */
 
@@ -2665,8 +2843,10 @@ test_list_indent_different (TestFixture *fixture,
 		"         A. b\n"
 		"         B. c\n"
 		"   2. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2695,8 +2875,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   A. b\n"
 		"   B. c\n"
 		"   1. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2706,8 +2888,10 @@ test_list_indent_different (TestFixture *fixture,
 		"undo:test\n"
 		"undo:drop:3\n"
 		"undo:undo:3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	/* Changing last items, multi-select */
 
@@ -2734,8 +2918,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   2. b\n"
 		"         I. c\n"
 		"        II. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2762,8 +2948,10 @@ test_list_indent_different (TestFixture *fixture,
 		"   2. b\n"
 		"   I. c\n"
 		"  II. d\n"
-		"suffix\n"))
+		"suffix\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -2874,8 +3062,10 @@ test_list_indent_multi (TestFixture *fixture,
 		"type:ii\\n\\n\n"
 		"action:style-preformat\n"
 		"type:line 6\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"action:select-all\n"
@@ -2921,8 +3111,10 @@ test_list_indent_multi (TestFixture *fixture,
 		"   line 5\n"
 		"         I. i\n"
 		"        II. ii\n"
-		"   line 6\n"))
+		"   line 6\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -2931,15 +3123,19 @@ test_list_indent_multi (TestFixture *fixture,
 		"undo:redo\n"
 		"undo:test\n"
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:undo\n"
 		"undo:test:1\n"
 		"undo:redo\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"seq:Shur\n" /* To be able to unindent the selection should end inside the list */
@@ -2977,8 +3173,10 @@ test_list_indent_multi (TestFixture *fixture,
 		"line 5\n"
 		"i\n"
 		"ii\n"
-		"line 6\n"))
+		"line 6\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 3 */
@@ -3099,8 +3297,10 @@ test_list_indent_nested (TestFixture *fixture,
 		"type:2\\n\\n\n"
 		"action:style-preformat\n"
 		"type:line 3\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"seq:hurSChcds\n" /* selects all but the "line 1" and "line 3" */
@@ -3153,8 +3353,10 @@ test_list_indent_nested (TestFixture *fixture,
 		"                  B. B\n"
 		"             + b\n"
 		"         2. 2\n"
-		"line 3\n"))
+		"line 3\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -3165,8 +3367,10 @@ test_list_indent_nested (TestFixture *fixture,
 		"undo:drop:2\n" /* 0 */
 		"undo:save\n" /* 1 */
 		"action:unindent\n",
-		!is_html ? NULL : unindented_html, unindented_plain))
+		!is_html ? NULL : unindented_html, unindented_plain)) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -3220,8 +3424,10 @@ test_list_indent_nested (TestFixture *fixture,
 		"      B. B\n"
 		" * b\n"
 		"2\n"
-		"line 3\n"))
+		"line 3\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 2 */
@@ -3272,8 +3478,10 @@ test_list_indent_nested (TestFixture *fixture,
 		"B\n"
 		"b\n"
 		"2\n"
-		"line 3\n"))
+		"line 3\n")) {
 		g_test_fail ();
+		return;
+	}
 
 	if (!test_utils_process_commands (fixture,
 		"undo:save\n" /* 2 */
@@ -4431,9 +4639,8 @@ test_cite_html2plain (TestFixture *fixture)
 		"> > level 2\n"
 		"> back in level 1\n"
 		"\n"
-		"out of the citation")) {
+		"out of the citation"))
 		g_test_fail ();
-	}
 }
 
 static void
@@ -5213,6 +5420,86 @@ test_replace_dialog_all (TestFixture *fixture)
 		g_test_fail ();
 }
 
+static void
+test_wrap_basic (TestFixture *fixture)
+{
+	test_utils_fixture_change_setting_int32 (fixture, "org.gnome.evolution.mail", "composer-word-wrap-length", 10);
+
+	if (!test_utils_run_simple_test (fixture,
+		"mode:html\n"
+		"type:123 456 789 123 456\\n\n"
+		"type:a b\\n\n"
+		"type:c \\n\n"
+		"type:d\\n\n"
+		"type: e f\\n\n"
+		"type:\\n\n"
+		"type:123 456 7 8 9 12345 1 2 3 456 789\n"
+		"action:select-all\n"
+		"action:wrap-lines\n",
+		HTML_PREFIX "<div>123 456<br>"
+		"789 123<br>"
+		"456 a b c <br>"
+		"d  e f</div>"
+		"<div><br></div>"
+		"<div>123 456 7<br>"
+		"8 9 12345<br>"
+		"1 2 3 456<br>"
+		"789</div>" HTML_SUFFIX,
+		"123 456\n"
+		"789 123\n"
+		"456 a b c \n"
+		"d  e f\n"
+		"\n"
+		"123 456 7\n"
+		"8 9 12345\n"
+		"1 2 3 456\n"
+		"789\n")) {
+		g_test_fail ();
+		return;
+	}
+
+	if (!test_utils_run_simple_test (fixture,
+		"action:select-all\n"
+		"seq:D\n"
+		"type:123 456 7 8 901234567890123456 1 2 3 4 5 6 7\\n\n"
+		"type:1234567890123456 12345678901234567890 1 2 3 4 5 6 7 8\\n\n"
+		"type:12345678 123456789 1234567890 123 456 78\n"
+		"action:select-all\n"
+		"action:wrap-lines\n",
+		HTML_PREFIX "<div>123 456 7<br>"
+		"8<br>"
+		"901234567890123456<br>"
+		"1 2 3 4 5<br>"
+		"6 7<br>"
+		"1234567890123456<br>"
+		"12345678901234567890<br>"
+		"1 2 3 4 5<br>"
+		"6 7 8<br>"
+		"12345678<br>"
+		"123456789<br>"
+		"1234567890<br>"
+		"123 456 78</div>" HTML_SUFFIX,
+		"123 456 7\n"
+		"8\n"
+		"9012345678\n"
+		"90123456\n"
+		"1 2 3 4 5\n"
+		"6 7\n"
+		"1234567890\n"
+		"123456\n"
+		"1234567890\n"
+		"1234567890\n"
+		"1 2 3 4 5\n"
+		"6 7 8\n"
+		"12345678\n"
+		"123456789\n"
+		"1234567890\n"
+		"123 456 78\n")) {
+		g_test_fail ();
+		return;
+	}
+}
+
 gint
 main (gint argc,
       gchar *argv[])
@@ -5406,6 +5693,7 @@ main (gint argc,
 	test_utils_add_test ("/delete/quoted-selection", test_delete_quoted_selection);
 	test_utils_add_test ("/replace/dialog", test_replace_dialog);
 	test_utils_add_test ("/replace-all/dialog", test_replace_dialog_all);
+	test_utils_add_test ("/wrap/basic", test_wrap_basic);
 
 	test_add_html_editor_bug_tests ();
 
