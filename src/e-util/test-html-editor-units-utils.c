@@ -227,6 +227,28 @@ test_utils_web_process_crashed_cb (WebKitWebView *web_view,
 	return FALSE;
 }
 
+/* <Control>+<Shift>+I */
+#define WEBKIT_INSPECTOR_MOD  (GDK_CONTROL_MASK | GDK_SHIFT_MASK)
+#define WEBKIT_INSPECTOR_KEY  (GDK_KEY_I)
+
+static gboolean
+wk_editor_key_press_event_cb (WebKitWebView *web_view,
+			      GdkEventKey *event)
+{
+	WebKitWebInspector *inspector;
+	gboolean handled = FALSE;
+
+	inspector = webkit_web_view_get_inspector (web_view);
+
+	if ((event->state & WEBKIT_INSPECTOR_MOD) == WEBKIT_INSPECTOR_MOD &&
+	    event->keyval == WEBKIT_INSPECTOR_KEY) {
+		webkit_web_inspector_show (inspector);
+		handled = TRUE;
+	}
+
+	return handled;
+}
+
 typedef struct _CreateData {
 	gpointer async_data;
 	TestFixture *fixture;
@@ -304,12 +326,22 @@ test_utils_html_editor_created_cb (GObject *source_object,
 	g_signal_connect (cnt_editor, "web-process-crashed",
 		G_CALLBACK (test_utils_web_process_crashed_cb), NULL);
 
-	if (!test_utils_get_multiple_web_processes () && !global_web_context &&
-	    WEBKIT_IS_WEB_VIEW (cnt_editor)) {
-		WebKitWebContext *web_context;
+	if (WEBKIT_IS_WEB_VIEW (cnt_editor)) {
+		WebKitSettings *web_settings;
 
-		web_context = webkit_web_view_get_context (WEBKIT_WEB_VIEW (cnt_editor));
-		global_web_context = g_object_ref (web_context);
+		web_settings = webkit_web_view_get_settings (WEBKIT_WEB_VIEW (cnt_editor));
+		webkit_settings_set_enable_developer_extras (web_settings, TRUE);
+
+		g_signal_connect (
+			cnt_editor, "key-press-event",
+			G_CALLBACK (wk_editor_key_press_event_cb), NULL);
+
+		if (!test_utils_get_multiple_web_processes () && !global_web_context) {
+			WebKitWebContext *web_context;
+
+			web_context = webkit_web_view_get_context (WEBKIT_WEB_VIEW (cnt_editor));
+			global_web_context = g_object_ref (web_context);
+		}
 	}
 
 	gtk_window_set_focus (GTK_WINDOW (fixture->window), GTK_WIDGET (cnt_editor));

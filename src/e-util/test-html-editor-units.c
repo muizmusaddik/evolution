@@ -5500,6 +5500,53 @@ test_wrap_basic (TestFixture *fixture)
 	}
 }
 
+static void
+test_wrap_nested (TestFixture *fixture)
+{
+	test_utils_fixture_change_setting_int32 (fixture, "org.gnome.evolution.mail", "composer-word-wrap-length", 10);
+
+	if (!test_utils_run_simple_test (fixture,
+		"mode:html\n"
+		"type:123 4 \n"
+		"action:bold\n"
+		"type:b\n"
+		"action:bold\n"
+		"type: 5 67 89 \n"
+		"action:bold\n"
+		"type:bold text\n"
+		"action:bold\n"
+		"type: 123 456 \n"
+		"action:italic\n"
+		"type:italic text \n"
+		"action:underline\n"
+		"type:and underline text\n"
+		"action:underline\n"
+		"type: xyz\n"
+		"action:italic\n"
+		"type: 7 8 9 1 2 3 4 5\n"
+		"action:select-all\n"
+		"action:wrap-lines\n",
+		HTML_PREFIX "<div>123 4 <b>b</b> 5<br>"
+		"67 89 <b>bold<br>"
+		"text</b> 123<br>"
+		"456 <i>italic<br>"
+		"text <u>and<br>"
+		"underline<br>"
+		"text</u> xyz</i> 7<br>"
+		"8 9 1 2 3<br>"
+		"4 5</div>" HTML_SUFFIX,
+		"123 4 b 5\n"
+		"67 89 bold\n"
+		"text 123\n"
+		"456 italic\n"
+		"text and\n"
+		"underline\n"
+		"text xyz 7\n"
+		"8 9 1 2 3\n"
+		"4 5\n"))
+		g_test_fail ();
+}
+
 gint
 main (gint argc,
       gchar *argv[])
@@ -5694,6 +5741,7 @@ main (gint argc,
 	test_utils_add_test ("/replace/dialog", test_replace_dialog);
 	test_utils_add_test ("/replace-all/dialog", test_replace_dialog_all);
 	test_utils_add_test ("/wrap/basic", test_wrap_basic);
+	test_utils_add_test ("/wrap/nested", test_wrap_nested);
 
 	test_add_html_editor_bug_tests ();
 

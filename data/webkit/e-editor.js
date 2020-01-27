@@ -3755,7 +3755,7 @@ EvoEditor.PasteText = function(text, isHTML, quote)
 {
 }
 
-EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLetters)
+EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLetters, wasNestedElem)
 {
 	var child = paragraphNode.firstChild, nextChild, appendBR;
 
@@ -3782,7 +3782,8 @@ EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLe
 					spacePos = text.indexOf(" ");
 
 				if (spacePos > 0 && (!usedLetters || usedLetters + spacePos <= maxLetters)) {
-					var textNode = document.createTextNode((usedLetters > 0 ? " " : "") + text.substr(0, spacePos));
+					var textNode = document.createTextNode(((usedLetters > 0 && !wasNestedElem) ? " " : "") +
+						text.substr(0, spacePos));
 
 					if (currentPar)
 						currentPar.appendChild(textNode);
@@ -3805,12 +3806,16 @@ EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLe
 					break;
 			}
 
-			child.nodeValue = (usedLetters > 0 ? " " : "") + text;
-			usedLetters += (usedLetters > 0 ? 1 : 0) + text.length;
+			child.nodeValue = ((usedLetters > 0 && !wasNestedElem) ? " " : "") + text;
+			usedLetters += ((usedLetters > 0 && !wasNestedElem) ? 1 : 0) + text.length;
 
 			if (usedLetters > maxLetters)
 				appendBR = true;
+
+			wasNestedElem = false;
 		} else if (child.tagName == "BR") {
+			wasNestedElem = false;
+
 			if (!child.nextSibling) {
 				return -1;
 			}
@@ -3844,6 +3849,7 @@ EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLe
 			}
 		} else if (child.tagName == "IMG") {
 			// just skip it, do not count it into the line length
+			wasNestedElem = false;
 		} else if (child.tagName == "B" ||
 			   child.tagName == "I" ||
 			   child.tagName == "U" ||
@@ -3853,9 +3859,14 @@ EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLe
 			   child.tagName == "FONT" ||
 			   child.tagName == "SPAN" ||
 			   child.tagName == "A") {
+			usedLetters = EvoEditor.wrapParagraph(child, maxLetters, null, usedLetters, true);
+			if (usedLetters == -1)
+				usedLetters = 0;
+			wasNestedElem = true;
 		} else if (child.nodeType == child.ELEMENT_NODE) {
 			// everything else works like a line stopper, with a new line added after it
 			appendBR = true;
+			wasNestedElem = false;
 		}
 
 		nextChild = child.nextSibling;
@@ -3943,7 +3954,7 @@ EvoEditor.WrapSelection = function()
 					currentPar = null;
 					usedLetters = 0;
 				} else {
-					usedLetters = EvoEditor.wrapParagraph(nodeFrom, maxLetters, currentPar, usedLetters);
+					usedLetters = EvoEditor.wrapParagraph(nodeFrom, maxLetters, currentPar, usedLetters, false);
 
 					if (usedLetters == -1) {
 						currentPar = null;
@@ -3954,7 +3965,7 @@ EvoEditor.WrapSelection = function()
 				}
 			}
 
-			// cannot break it now, because want to delete the last empty paragraph
+			// cannot break the cycle now, because want to delete the last empty paragraph
 			var done = nodeFrom === nodeTo;
 
 			if (!nodeFrom.childNodes.length) {
