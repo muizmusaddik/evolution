@@ -2051,7 +2051,7 @@ webkit_editor_insert_content (EContentEditor *editor,
 	if ((flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
 	    !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoEditor.PasteText(%s, %x, %x);",
+			"EvoEditor.InsertContent(%s, %x, %x);",
 			content, (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) != 0, FALSE);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
 		   (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML)) {
@@ -2088,12 +2088,12 @@ webkit_editor_insert_content (EContentEditor *editor,
 		  !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
 		  !(flags & E_CONTENT_EDITOR_INSERT_QUOTE_CONTENT)) {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoEditor.PasteText(%s, %x, %x);",
+			"EvoEditor.InsertContent(%s, %x, %x);",
 			content, TRUE, FALSE);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_QUOTE_CONTENT) &&
 		   !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
-			"EvoEditor.PasteText(%s, %x, %x);",
+			"EvoEditor.InsertContent(%s, %x, %x);",
 			content, (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML) != 0, TRUE);
 	} else if (!(flags & E_CONTENT_EDITOR_INSERT_CONVERT) &&
 		   !(flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL)) {

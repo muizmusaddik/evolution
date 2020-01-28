@@ -3750,9 +3750,167 @@ EvoEditor.ConvertContent = function(preferredPlainText, startBottom, topSignatur
 {
 }
 
-// replaces current selection with the next plain text or HTML, quoted or normal DIV
-EvoEditor.PasteText = function(text, isHTML, quote)
+// replaces current selection with the plain text or HTML, quoted or normal DIV
+EvoEditor.InsertContent = function(text, isHTML, quote)
 {
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "InsertContent");
+	try {
+		if (!document.getSelection().isCollapsed) {
+			EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::sel-remove", null, null,
+				EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+			try {
+				document.getSelection().deleteFromDocument();
+			} finally {
+				EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::sel-remove");
+			}
+		}
+
+		var content = document.createElement(quote ? "BLOCKQUOTE" : "DIV");
+
+		if (quote) {
+			content.setAttribute("type", "cite");
+		}
+
+		if (isHTML) {
+			if (EvoEditor.mode == EvoEditor.MODE_HTML) {
+				content.innerHTML = text;
+
+				// paste can contain <meta> elements, like the one with Content-Type, which can be removed
+				while (content.firstElementChild && content.firstElementChild.tagName == "META") {
+					content.removeChild(content.firstElementChild);
+				}
+			} else {
+				content.innerText = text;
+			}
+		} else {
+			content.innerText = text;
+		}
+
+		if (quote) {
+			var baseNode = document.getSelection().baseNode, intoBody = false;
+
+			if (!content.firstElementChild || (content.firstElementChild.tagName != "DIV" && content.firstElementChild.tagName != "P" &&
+			    content.firstElementChild.tagName != "PRE")) {
+				// enclose quoted text into DIV
+				var node = document.createElement("DIV");
+
+				while (content.firstChild) {
+					node.appendChild(content.firstChild);
+				}
+
+				content.appendChild(node);
+			}
+
+			if (baseNode) {
+				var node, parentBlock = null;
+
+				if (baseNode.nodeType == baseNode.ELEMENT_NODE) {
+					node = baseNode;
+				} else {
+					node = baseNode.parentElement;
+				}
+
+				while (node && node.tagName != "BODY" && !EvoEditor.IsBlockNode(node)) {
+					parentBlock = node;
+
+					node = node.parentElement;
+				}
+
+				if (node && node.tagName != "BLOCKQUOTE")
+					parentBlock = node;
+				else if (!parentBlock)
+					parentBlock = node;
+
+				if (!parentBlock) {
+					intoBody = true;
+				} else {
+					var willSplit = parentBlock.tagName == "DIV" || parentBlock.tagName == "P" || parentBlock.tagName == "PRE";
+
+					EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::text", parentBlock, parentBlock,
+						(willSplit ? EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE : 0) | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+					try {
+						if (willSplit) {
+							// need to split the content up to the parent block node
+							if (baseNode.nodeType == baseNode.TEXT_NODE) {
+								baseNode.splitText(document.getSelection().baseOffset);
+							}
+
+							var from = baseNode.nextSibling, parent, nextFrom = null;
+
+							parent = from ? from.parentElement : baseNode.parentElement;
+
+							if (!from && parent) {
+								from = parent.nextElementSibling;
+								nextFrom = from;
+								parent = parent.parentElement;
+							}
+
+							while (parent && parent.tagName != "BODY") {
+								nextFrom = null;
+
+								if (from) {
+									var clone;
+
+									clone = from.parentElement.cloneNode(false);
+									from.parentElement.parentElement.insertBefore(clone, from.parentElement.nextSibling);
+
+									nextFrom = clone;
+
+									while (from.nextSibling) {
+										clone.appendChild(from.nextSibling);
+									}
+
+									clone.insertBefore(from, clone.firstChild);
+								}
+
+								if (parent === parentBlock.parentElement || parent.parentElement.tagName == "BLOCKQUOTE") {
+									break;
+								}
+
+								from = nextFrom;
+								parent = parent.parentElement;
+							}
+						}
+
+						parentBlock.insertAdjacentElement("afterend", content);
+
+						if (content.nextSibling)
+							document.getSelection().setPosition(content.nextSibling, 0);
+						else if (content.lastChild)
+							document.getSelection().setPosition(content.lastChild, 0);
+						else
+							document.getSelection().setPosition(content, 0);
+
+						if (baseNode.nodeType == baseNode.ELEMENT_NODE && baseNode.parentElement &&
+						    (baseNode.tagName == "DIV" || baseNode.tagName == "P" || baseNode.tagName == "PRE") &&
+						    (!baseNode.children.length || (baseNode.children.length == 1 && baseNode.children[0].tagName == "BR"))) {
+							baseNode.parentElement.removeChild(baseNode);
+						}
+					} finally {
+						EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::text");
+					}
+				}
+			} else {
+				intoBody = true;
+			}
+
+			if (intoBody) {
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::text", document.body, document.body,
+					EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE | EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+				try {
+					document.body.insertAdjacentElement("afterbegin", content);
+				} finally {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::text");
+				}
+			}
+		} else {
+			EvoEditor.InsertHTML("InsertContent::text", content.outerHTML);
+		}
+	} finally {
+		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "InsertContent");
+		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+		EvoEditor.EmitContentChanged();
+	}
 }
 
 EvoEditor.wrapParagraph = function(paragraphNode, maxLetters, currentPar, usedLetters, wasNestedElem)
