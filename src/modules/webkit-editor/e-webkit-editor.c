@@ -86,8 +86,6 @@ struct _EWebKitEditorPrivate {
 	gboolean can_undo;
 	gboolean can_redo;
 
-	gboolean reload_in_progress;
-
 	guint32 style_flags;
 	guint32 temporary_style_flags; /* that's for collapsed selection, format changes only after something is typed */
 	gboolean is_indented;
@@ -1122,37 +1120,6 @@ undu_redo_state_changed_cb (WebKitUserContentManager *manager,
 }
 
 static void
-dispatch_pending_operations (EWebKitEditor *wk_editor)
-{
-	if (wk_editor->priv->webkit_load_event != WEBKIT_LOAD_FINISHED)
-		return;
-
-	/* Dispatch queued operations - as we are using this just for load
-	 * operations load just the latest request and throw away the rest. */
-	if (wk_editor->priv->post_reload_operations &&
-	    !g_queue_is_empty (wk_editor->priv->post_reload_operations)) {
-
-		PostReloadOperation *op;
-
-		op = g_queue_pop_head (wk_editor->priv->post_reload_operations);
-
-		op->func (wk_editor, op->data, op->flags);
-
-		if (op->data_free_func)
-			op->data_free_func (op->data);
-		g_free (op);
-
-		while ((op = g_queue_pop_head (wk_editor->priv->post_reload_operations))) {
-			if (op->data_free_func)
-				op->data_free_func (op->data);
-			g_free (op);
-		}
-
-		g_queue_clear (wk_editor->priv->post_reload_operations);
-	}
-}
-
-static void
 webkit_editor_queue_post_reload_operation (EWebKitEditor *wk_editor,
                                            PostReloadOperationFunc func,
                                            gpointer data,
@@ -2001,6 +1968,8 @@ webkit_editor_set_html_mode (EWebKitEditor *wk_editor,
 	if (html_mode == wk_editor->priv->html_mode)
 		return;
 
+	wk_editor->priv->html_mode = html_mode;
+
 	if (html_mode) {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 			"EvoEditor.SetMode(EvoEditor.MODE_HTML);");
@@ -2008,20 +1977,6 @@ webkit_editor_set_html_mode (EWebKitEditor *wk_editor,
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 			"EvoEditor.SetMode(EvoEditor.MODE_PLAIN_TEXT);");
 	}
-}
-
-static void
-e_webkit_editor_load_data (EWebKitEditor *wk_editor,
-			   const gchar *html)
-{
-	g_return_if_fail (E_IS_WEBKIT_EDITOR (wk_editor));
-
-	if (!html)
-		html = "";
-
-	/* Make WebKit think we are displaying a local file, so that it
-	 * does not block loading resources from file:// protocol */
-	webkit_web_view_load_html (WEBKIT_WEB_VIEW (wk_editor), html, "file:///");
 }
 
 static void
@@ -2037,8 +1992,7 @@ webkit_editor_insert_content (EContentEditor *editor,
 	 * another load operation) so we have to queue the current operation and
 	 * redo it again when the view is ready. This was happening when loading
 	 * the stuff in EMailSignatureEditor. */
-	if (wk_editor->priv->webkit_load_event != WEBKIT_LOAD_FINISHED ||
-	    wk_editor->priv->reload_in_progress) {
+	if (wk_editor->priv->webkit_load_event != WEBKIT_LOAD_FINISHED) {
 		webkit_editor_queue_post_reload_operation (
 			wk_editor,
 			(PostReloadOperationFunc) webkit_editor_insert_content,
@@ -2057,8 +2011,8 @@ webkit_editor_insert_content (EContentEditor *editor,
 		   (flags & E_CONTENT_EDITOR_INSERT_TEXT_HTML)) {
 		if ((strstr (content, "data-evo-draft") ||
 		     strstr (content, "data-evo-signature-plain-text-mode"))) {
-			wk_editor->priv->reload_in_progress = TRUE;
-			e_webkit_editor_load_data (wk_editor, content);
+			e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+				"EvoEditor.LoadHTML(%s);", content);
 			return;
 		}
 
@@ -2067,16 +2021,16 @@ webkit_editor_insert_content (EContentEditor *editor,
 			if (strstr (content, "<!-- text/html -->") &&
 			    !strstr (content, "<!-- disable-format-prompt -->")) {
 				if (!show_lose_formatting_dialog (wk_editor)) {
-					wk_editor->priv->reload_in_progress = TRUE;
 					webkit_editor_set_html_mode (wk_editor, TRUE);
-					e_webkit_editor_load_data (wk_editor, content);
+					e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+						"EvoEditor.LoadHTML(%s);", content);
 					return;
 				}
 			}
 		}
 
-		wk_editor->priv->reload_in_progress = TRUE;
-		e_webkit_editor_load_data (wk_editor, content);
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoEditor.LoadHTML(%s);", content);
 	} else if ((flags & E_CONTENT_EDITOR_INSERT_REPLACE_ALL) &&
 		   (flags & E_CONTENT_EDITOR_INSERT_TEXT_PLAIN)) {
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
@@ -2567,10 +2521,9 @@ webkit_editor_is_ready (EContentEditor *editor)
 
 	wk_editor = E_WEBKIT_EDITOR (editor);
 
-	/* Editor is ready just in case that the web view is not loading, there
-	 * is no reload in progress and there is no pending post reload operation. */
-	return !webkit_web_view_is_loading (WEBKIT_WEB_VIEW (wk_editor)) &&
-		!wk_editor->priv->reload_in_progress;
+	/* Editor is ready just in case that the web view is not loading. */
+	return wk_editor->priv->webkit_load_event == WEBKIT_LOAD_FINISHED &&
+		!webkit_web_view_is_loading (WEBKIT_WEB_VIEW (wk_editor));
 }
 
 static gchar *
@@ -4092,7 +4045,7 @@ webkit_editor_constructed (GObject *object)
 
 	g_object_unref (settings);
 
-	e_webkit_editor_load_data (wk_editor, "");
+	webkit_web_view_load_html (WEBKIT_WEB_VIEW (wk_editor), "", "evo-file:///");
 }
 
 static GObjectConstructParam*
@@ -4698,17 +4651,35 @@ webkit_editor_load_changed_cb (EWebKitEditor *wk_editor,
 {
 	wk_editor->priv->webkit_load_event = load_event;
 
-	if (load_event != WEBKIT_LOAD_FINISHED)
+	if (load_event != WEBKIT_LOAD_FINISHED ||
+	    !webkit_editor_is_ready (E_CONTENT_EDITOR (wk_editor)))
 		return;
 
-	wk_editor->priv->reload_in_progress = FALSE;
+	/* Dispatch queued operations - as we are using this just for load
+	 * operations load just the latest request and throw away the rest. */
+	if (wk_editor->priv->post_reload_operations &&
+	    !g_queue_is_empty (wk_editor->priv->post_reload_operations)) {
 
-	if (webkit_editor_is_ready (E_CONTENT_EDITOR (wk_editor))) {
-		e_content_editor_emit_load_finished (E_CONTENT_EDITOR (wk_editor));
-		webkit_editor_style_updated_cb (wk_editor);
+		PostReloadOperation *op;
+
+		op = g_queue_pop_head (wk_editor->priv->post_reload_operations);
+
+		op->func (wk_editor, op->data, op->flags);
+
+		if (op->data_free_func)
+			op->data_free_func (op->data);
+		g_free (op);
+
+		while ((op = g_queue_pop_head (wk_editor->priv->post_reload_operations))) {
+			if (op->data_free_func)
+				op->data_free_func (op->data);
+			g_free (op);
+		}
+
+		g_queue_clear (wk_editor->priv->post_reload_operations);
 	}
 
-	dispatch_pending_operations (wk_editor);
+	webkit_editor_style_updated_cb (wk_editor);
 
 	if (wk_editor->priv->initialized_callback) {
 		EContentEditorInitializedCallback initialized_callback;
@@ -4722,6 +4693,8 @@ webkit_editor_load_changed_cb (EWebKitEditor *wk_editor,
 
 		initialized_callback (E_CONTENT_EDITOR (wk_editor), initialized_user_data);
 	}
+
+	e_content_editor_emit_load_finished (E_CONTENT_EDITOR (wk_editor));
 }
 
 static void

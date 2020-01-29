@@ -3727,7 +3727,11 @@ EvoEditor.InsertSignature = function(content, isHTML, uid, fromMessage, checkCha
 			node = document.getSelection().baseNode;
 
 			if (node) {
-				node.scrollIntoViewIfNeeded();
+				if (node.nodeType != node.ELEMENT_NODE)
+					node = node.parentElement;
+
+				if (node && node.scrollIntoViewIfNeeded != undefined)
+					node.scrollIntoViewIfNeeded();
 			}
 		}
 	} finally {
@@ -3910,6 +3914,80 @@ EvoEditor.InsertContent = function(text, isHTML, quote)
 		EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "InsertContent");
 		EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
 		EvoEditor.EmitContentChanged();
+	}
+}
+
+EvoEditor.processLoadedContent = function()
+{
+	var node, cite;
+
+	node = document.querySelector("span.-x-evo-cite-body");
+
+	cite = node;
+
+	if (node && node.parentElement) {
+		node.parentElement.removeChild(node);
+	}
+
+	if (cite) {
+		cite = document.createElement("BLOCKQUOTE");
+		cite.setAttribute("type", "cite");
+		while (document.body.firstChild) {
+			cite.appendChild(document.body.firstChild);
+		}
+
+		document.body.appendChild(cite);
+	}
+
+	var ii, list;
+
+	list = document.querySelectorAll("div[data-headers]");
+
+	for (ii = list.length - 1; ii >= 0; ii--) {
+		node = list[ii];
+
+		node.removeAttribute("data-headers");
+
+		document.body.insertAdjacentElement("afterbegin", node);
+	}
+
+	list = document.querySelectorAll("span.-x-evo-to-body[data-credits]");
+
+	for (ii = list.length - 1; ii >= 0; ii--) {
+		node = list[ii];
+
+		var credits = node.getAttribute("data-credits");
+		if (credits) {
+			var elem;
+
+			elem = document.createElement("DIV");
+			elem.innerText = credits;
+
+			document.body.insertAdjacentElement("afterbegin", elem);
+		}
+
+		node.parentElement.removeChild(node);
+	}
+
+	list = document.querySelectorAll(".-x-evo-paragraph");
+
+	for (ii = list.length - 1; ii >= 0; ii--) {
+		node = list[ii];
+		node.removeAttribute("class");
+	}
+}
+
+EvoEditor.LoadHTML = function(html)
+{
+	EvoUndoRedo.Disable();
+	try {
+		document.documentElement.innerHTML = html;
+
+		EvoEditor.processLoadedContent();
+		EvoEditor.initializeContent();
+	} finally {
+		EvoUndoRedo.Enable();
+		EvoUndoRedo.Clear();
 	}
 }
 
