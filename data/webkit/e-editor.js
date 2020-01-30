@@ -2319,7 +2319,7 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		// the replace call below replaces &nbsp; (0xA0) with regular space
 		match = EvoEditor.findPattern(text.replace(/ /g, " "), isEmail ? EvoEditor.EMAIL_PATTERN : EvoEditor.URL_PATTERN);
 		if (match) {
-			var url = text.substring(match.start, match.end), node, selection;
+			var url = text.substring(match.start, match.end), node;
 
 			// because 'search' uses Regex and throws exception on brackets and other Regex-sensitive characters
 			var isInvalidTrailingChar = function(chr) {
@@ -2371,15 +2371,16 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 			}
 
 			if (url.length > 0) {
-				selection = EvoSelection.Store(document);
-
 				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink", baseNode.parentElement, baseNode.parentElement,
 					EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 
 				try {
+					var offset = selection.baseOffset, updateSelection = selection.baseNode === baseNode, newBaseNode;
+
 					covered = true;
 
 					baseNode.splitText(match.end);
+					newBaseNode = baseNode.nextSibling;
 					baseNode.splitText(match.start);
 
 					baseNode = baseNode.nextSibling;
@@ -2395,7 +2396,8 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 					baseNode.parentElement.insertBefore(node, baseNode);
 					node.appendChild(baseNode);
 
-					EvoSelection.Restore(document, selection);
+					if (updateSelection && newBaseNode && offset - match.end >= 0)
+						selection.setPosition(newBaseNode, offset - match.end);
 				} finally {
 					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
 					EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
