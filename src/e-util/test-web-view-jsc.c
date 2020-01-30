@@ -2539,6 +2539,155 @@ test_convert_to_plain (TestFixture *fixture)
 	}
 }
 
+static void
+test_convert_to_plain_quoted (TestFixture *fixture)
+{
+	#define HTML(_body) ("<html><head><style><!-- span.Apple-tab-span { white-space:pre; } --></style></head><body style='font-family:monospace;'>" _body "</body></html>")
+
+	struct _tests {
+		const gchar *html;
+		const gchar *plain;
+		gint normal_div_width;
+	} tests[] = {
+	/* 0 */ { HTML ("<div style='width:10ch;'>123 456 789 123</div>"
+		"<blockquote type='cite'>"
+			"<div style='width:8ch;'>123 456 789 1 2 3 4</div>"
+			"<div style='width:8ch;'>abc def ghi j k l m</div>"
+		"</blockquote>"
+		"<div>end</div>"),
+		"123 456\n"
+		"789 123\n"
+		"> 123 456\n"
+		"> 789 1 2\n"
+		"> 3 4\n"
+		"> abc def\n"
+		"> ghi j k\n"
+		"> l m\n"
+		"end\n",
+		10 },
+	/* 1 */ { HTML ("<div style='width:12ch;'>123 456</div>"
+		"<blockquote type='cite'>"
+			"<div style='width:10ch;'>123 456</div>"
+			"<blockquote>"
+				"<div style='width:8ch;'>789 1 2 3 4</div>"
+			"</blockquote>"
+			"<div style='width:10ch;'>mid</div>"
+			"<blockquote>"
+				"<blockquote>"
+					"<div style='width:6ch;'>abc</div>"
+					"<div style='width:6ch;'>def ghi j k l m</div>"
+				"</blockquote>"
+				"<div style='width:8ch;'>abc d e f g h i j</div>"
+			"</blockquote>"
+			"<div style='width:10ch;'>l1 a b c d e f g</div>"
+		"</blockquote>"
+		"<div>end</div>"),
+		"123 456\n"
+		"> 123 456\n"
+		"> > 789 1 2\n"
+		"> > 3 4\n"
+		"> mid\n"
+		"> > > abc\n"
+		"> > > def\n"
+		"> > > ghi j\n"
+		"> > > k l m\n"
+		"> > abc d e\n"
+		"> > f g h i\n"
+		"> > j\n"
+		"> l1 a b c d\n"
+		"> e f g\n"
+		"end\n",
+		10 },
+	/* 2 */ { HTML ("<div style='width:10ch;'>123 456<br>789 123</div>"
+		"<blockquote type='cite'>"
+			"<div style='width:8ch;'>123 456<br>789 1 2 3 4</div>"
+			"<blockquote type='cite'>"
+				"<div style='width:6ch;'>abc<br>def g h i j k</div>"
+			"</blockquote>"
+		"</blockquote>"
+		"<div>end</div>"),
+		"123 456\n"
+		"789 123\n"
+		"> 123 456\n"
+		"> 789 1 2\n"
+		"> 3 4\n"
+		"> > abc\n"
+		"> > def g\n"
+		"> > h i j\n"
+		"> > k\n"
+		"end\n",
+		10 },
+	/* 3 */ { HTML ("<p style='width:10ch;'>123 456<br>789 123</p>"
+		"<blockquote type='cite'>"
+			"<p style='width:8ch;'>123 456<br>789 1 2 3 4</p>"
+			"<blockquote type='cite'>"
+				"<p style='width:6ch;'>abc<br>def g h i j k</p>"
+			"</blockquote>"
+		"</blockquote>"
+		"<p>end</p>"),
+		"123 456\n"
+		"789 123\n"
+		"> 123 456\n"
+		"> 789 1 2\n"
+		"> 3 4\n"
+		"> > abc\n"
+		"> > def g\n"
+		"> > h i j\n"
+		"> > k\n"
+		"end\n",
+		10 },
+	/* 4 */ { HTML ("<pre>123 456 789 123</pre>"
+		"<blockquote type='cite'>"
+			"<pre>123 456 789 1 2 3 4</pre>"
+			"<blockquote type='cite'>"
+				"<pre>abc def g h i j k</pre>"
+			"</blockquote>"
+		"</blockquote>"
+		"<pre>end</pre>"),
+		"123 456 789 123\n"
+		"> 123 456 789 1 2 3 4\n"
+		"> > abc def g h i j k\n"
+		"end\n",
+		10 },
+	/* 5 */ { HTML ("<pre>123 456\n789 123</pre>"
+		"<blockquote type='cite'>"
+			"<pre>123 456\n789 1 2 3 4</pre>"
+			"<blockquote type='cite'>"
+				"<pre>abc def\ng h\ni j k</pre>"
+			"</blockquote>"
+			"<pre>a b\nc\nd e f</pre>"
+		"</blockquote>"
+		"<pre>end</pre>"),
+		"123 456\n"
+		"789 123\n"
+		"> 123 456\n"
+		"> 789 1 2 3 4\n"
+		"> > abc def\n"
+		"> > g h\n"
+		"> > i j k\n"
+		"> a b\n"
+		"> c\n"
+		"> d e f\n"
+		"end\n",
+		10 }
+	};
+
+	#undef HTML
+
+	gchar *script;
+	gint ii;
+
+	for (ii = 0; ii < G_N_ELEMENTS (tests); ii++) {
+		test_utils_load_string (fixture, tests[ii].html);
+
+		script = e_web_view_jsc_printf_script ("EvoConvert.ToPlainText(document.body, %d);", tests[ii].normal_div_width);
+
+		test_utils_jsc_call_string_and_verify (fixture, script, tests[ii].plain);
+
+		g_free (script);
+	}
+}
+
 gint
 main (gint argc,
       gchar *argv[])
@@ -2570,6 +2719,7 @@ main (gint argc,
 	test_utils_add_test ("/EWebView/GetContent", test_get_content);
 	test_utils_add_test ("/EWebView/GetElementFromPoint", test_get_element_from_point);
 	test_utils_add_test ("/EWebView/ConvertToPlain", test_convert_to_plain);
+	test_utils_add_test ("/EWebView/ConvertToPlainQuoted", test_convert_to_plain_quoted);
 
 	res = g_test_run ();
 

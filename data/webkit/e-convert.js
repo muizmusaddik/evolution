@@ -336,7 +336,19 @@ EvoConvert.calcLineLetters = function(line)
 	return len;
 }
 
-EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapWidth, extraIndent, liText)
+EvoConvert.getQuotePrefix = function(quoteLevel, ltr)
+{
+	var prefix = "";
+
+	if (quoteLevel > 0) {
+		prefix = ltr ? "> " : " <";
+		prefix = prefix.repeat(quoteLevel);
+	}
+
+	return prefix;
+}
+
+EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapWidth, extraIndent, liText, quoteLevel)
 {
 	if (!str || str == "")
 		return liText ? liText : str;
@@ -488,7 +500,10 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 			worker.commit(ii);
 		}
 	} else {
-		lines[lines.length] = str.endsWith("\n") ? str.substr(0, str.length - 1) : str;
+		if (str.endsWith("\n"))
+			str = str.substr(0, str.length - 1);
+
+		lines = str.split("\n");
 	}
 
 	var extraIndentStr = extraIndent > 0 ? " ".repeat(extraIndent) : null;
@@ -578,6 +593,13 @@ EvoConvert.formatParagraph = function(str, ltr, align, indent, whiteSpace, wrapW
 				line = line + indent;
 		}
 
+		if (quoteLevel > 0) {
+			if (ltr)
+				line = EvoConvert.getQuotePrefix(quoteLevel, ltr) + line;
+			else
+				line = line + EvoConvert.getQuotePrefix(quoteLevel, ltr);
+		}
+
 		str += line + "\n";
 	}
 
@@ -603,7 +625,7 @@ EvoConvert.ImgToText = function(img)
 	return txt;
 }
 
-EvoConvert.extractElemText = function(elem, normalDivWidth)
+EvoConvert.extractElemText = function(elem, normalDivWidth, quoteLevel)
 {
 	if (!elem)
 		return "";
@@ -619,13 +641,13 @@ EvoConvert.extractElemText = function(elem, normalDivWidth)
 		if (!node)
 			continue;
 
-		str += EvoConvert.processNode(node, normalDivWidth);
+		str += EvoConvert.processNode(node, normalDivWidth, quoteLevel);
 	}
 
 	return str;
 }
 
-EvoConvert.processNode = function(node, normalDivWidth)
+EvoConvert.processNode = function(node, normalDivWidth, quoteLevel)
 {
 	var str = "";
 
@@ -707,17 +729,20 @@ EvoConvert.processNode = function(node, normalDivWidth)
 				width = normalDivWidth;
 			}
 
-			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth), ltr, align, indent, whiteSpace, width, extraIndent, liText);
+			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth, quoteLevel), ltr, align, indent, whiteSpace, width, extraIndent, liText, quoteLevel);
 		} else if (node.tagName == "PRE") {
-			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth), ltr, align, indent, "pre", -1, 0, "");
+			str = EvoConvert.formatParagraph(EvoConvert.extractElemText(node, normalDivWidth, quoteLevel), ltr, align, indent, "pre", -1, 0, "", quoteLevel);
 		} else if (node.tagName == "BR") {
 			str = "\n";
 		} else if (node.tagName == "IMG") {
 			str = EvoConvert.ImgToText(node);
 		} else {
-			str = EvoConvert.extractElemText(node, normalDivWidth);
+			var isBlockquote = node.tagName == "BLOCKQUOTE";
 
-			if (str != "\n" && ((style && style.display == "block") || node.tagName == "ADDRESS")) {
+			str = EvoConvert.extractElemText(node, normalDivWidth, quoteLevel + (isBlockquote ? 1 : 0));
+
+			if ((!isBlockquote || !str.endsWith("\n")) &&
+			    str != "\n" && ((style && style.display == "block") || node.tagName == "ADDRESS")) {
 				str += "\n";
 			}
 		}
@@ -772,7 +797,7 @@ EvoConvert.ToPlainText = function(element, normalDivWidth)
 		if (!node)
 			continue;
 
-		str += EvoConvert.processNode(node, normalDivWidth);
+		str += EvoConvert.processNode(node, normalDivWidth, 0);
 	}
 
 	return str;
