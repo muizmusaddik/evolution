@@ -2243,6 +2243,119 @@ EvoEditor.UpdateThemeStyleSheet = function(css)
 	return EvoEditor.UpdateStyleSheet("x-evo-theme-sheet", css);
 }
 
+EvoEditor.findSmileys = function(text, unicodeSmileys)
+{
+	/* Based on original use_pictograms() from GtkHTML */
+	var emoticons_chars = [
+		/*  0 */  "D",  "O",  ")",  "(",  "|",  "/",  "P",  "Q",  "*",  "!",
+		/* 10 */  "S", null,  ":",  "-", null,  ":", null,  ":",  "-",  null,
+		/* 20 */  ":", null,  ":",  ";",  "=",  "-", "\"", null,  ":",  ";",
+		/* 30 */  "B", "\"",  "|", null,  ":",  "-",  "'", null,  ":",  "X",
+		/* 40 */ null,  ":", null,  ":",  "-", null,  ":", null,  ":",  "-",
+		/* 50 */ null,  ":", null,  ":",  "-", null,  ":", null,  ":",  "-",
+		/* 60 */ null,  ":", null,  ":", null,  ":",  "-", null,  ":", null,
+		/* 70 */  ":",  "-", null,  ":", null,  ":",  "-", null,  ":", null ];
+	var emoticons_states = [
+		/*  0 */  12,  17,  22,  34,  43,  48,  53,  58,  65,  70,
+		/* 10 */  75,   0, -15,  15,   0, -15,   0, -17,  20,   0,
+		/* 20 */ -17,   0, -14, -20, -14,  28,  63,   0, -14, -20,
+		/* 30 */  -3,  63, -18,   0, -12,  38,  41,   0, -12,  -2,
+		/* 40 */   0,  -4,   0, -10,  46,   0, -10,   0, -19,  51,
+		/* 50 */   0, -19,   0, -11,  56,   0, -11,   0, -13,  61,
+		/* 60 */   0, -13,   0,  -6,   0,  68,  -7,   0,  -7,   0,
+		/* 70 */ -16,  73,   0, -16,   0, -21,  78,   0, -21,   0 ];
+	var emoticons_icon_names = [
+		"face-angel",
+		"face-angry",
+		"face-cool",
+		"face-crying",
+		"face-devilish",
+		"face-embarrassed",
+		"face-kiss",
+		"face-laugh",		/* not used */
+		"face-monkey",		/* not used */
+		"face-plain",
+		"face-raspberry",
+		"face-sad",
+		"face-sick",
+		"face-smile",
+		"face-smile-big",
+		"face-smirk",
+		"face-surprise",
+		"face-tired",
+		"face-uncertain",
+		"face-wink",
+		"face-worried"
+	];
+	var res = null, pos, state, start, uc;
+
+	start = text.length - 1;
+
+	if (start < 1)
+		return res;
+
+	pos = start;
+	while (pos >= 0) {
+		state = 0;
+		while (pos >= 0) {
+			uc = text[pos];
+			var relative = 0;
+			while (emoticons_chars[state + relative] != null) {
+				if (emoticons_chars[state + relative] == uc) {
+					break;
+				}
+				relative++;
+			}
+			state = emoticons_states[state + relative];
+			/* 0 .. not found, -n .. found n-th */
+			if (state <= 0)
+				break;
+			pos--;
+		}
+
+		/* Special case needed to recognize angel and devilish. */
+		if (pos > 0 && state == -14) {
+			uc = text[pos - 1];
+			if (uc == 'O') {
+				state = -1;
+				pos--;
+			} else if (uc == '>') {
+				state = -5;
+				pos--;
+			}
+		}
+
+		if (state < 0) {
+			if (pos > 0) {
+				uc = text[pos - 1];
+
+				if (uc != ' ') {
+					return res;
+				}
+			}
+
+			var obj = EvoEditor.lookupEmoticon(emoticons_icon_names[- state - 1], unicodeSmileys);
+
+			if (obj) {
+				obj.start = pos;
+				obj.end = start + 1;
+
+				if (!res)
+					res = [];
+
+				res[res.length] = obj;
+			}
+
+			pos--;
+			start = pos;
+		} else {
+			break;
+		}
+	}
+
+	return res;
+}
+
 EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 {
 	var isInsertParagraph = inputEvent.inputType == "insertParagraph";
@@ -2313,6 +2426,34 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 
 	var text = baseNode.nodeValue, covered = false;
 
+	var replaceMatchWithNode = function(opType, match, newNode, canEmit) {
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, baseNode.parentElement, baseNode.parentElement,
+			EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+
+		try {
+			var offset = selection.baseOffset, updateSelection = selection.baseNode === baseNode, newBaseNode;
+
+			baseNode.splitText(match.end);
+			newBaseNode = baseNode.nextSibling;
+			baseNode.splitText(match.start);
+
+			baseNode = baseNode.nextSibling;
+
+			baseNode.parentElement.insertBefore(newNode, baseNode);
+			baseNode.parentElement.removeChild(baseNode);
+
+			if (updateSelection && newBaseNode && offset - match.end >= 0)
+				selection.setPosition(newBaseNode, offset - match.end);
+		} finally {
+			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType);
+
+			if (canEmit) {
+				EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+				EvoEditor.EmitContentChanged();
+			}
+		}
+	}
+
 	if (canLinks) {
 		var isEmail = text.search("@") >= 0, match;
 
@@ -2371,43 +2512,57 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 			}
 
 			if (url.length > 0) {
-				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink", baseNode.parentElement, baseNode.parentElement,
-					EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
+				covered = true;
 
-				try {
-					var offset = selection.baseOffset, updateSelection = selection.baseNode === baseNode, newBaseNode;
+				if (isEmail)
+					url = "mailto:" + url;
+				else if (url.startsWith("www."))
+					url = "https://" + url;
 
-					covered = true;
+				node = document.createElement("A");
+				node.href = url;
 
-					baseNode.splitText(match.end);
-					newBaseNode = baseNode.nextSibling;
-					baseNode.splitText(match.start);
-
-					baseNode = baseNode.nextSibling;
-
-					if (isEmail)
-						url = "mailto:" + url;
-					else if (url.startsWith("www."))
-						url = "http://" + url;
-
-					node = document.createElement("A");
-					node.href = url;
-
-					baseNode.parentElement.insertBefore(node, baseNode);
-					node.appendChild(baseNode);
-
-					if (updateSelection && newBaseNode && offset - match.end >= 0)
-						selection.setPosition(newBaseNode, offset - match.end);
-				} finally {
-					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "magicLink");
-					EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
-					EvoEditor.EmitContentChanged();
-				}
+				replaceMatchWithNode("magicLink", match, node, true);
 			}
 		}
 	}
 
 	if (!covered && EvoEditor.MAGIC_SMILEYS) {
+		var matches;
+
+		// the replace call below replaces &nbsp; (0xA0) with regular space
+		matches = EvoEditor.findSmileys(text.replace(/ /g, " "), EvoEditor.UNICODE_SMILEYS);
+		if (matches) {
+			var sz = matches.length, node, tmpElement = null;
+
+			if (sz > 1)
+				EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, "magicSmiley");
+
+			try {
+				// they are ordered from the end already
+				for (ii = 0; ii < sz; ii++) {
+					var match = matches[ii];
+
+					if (!match.imageUri || EvoEditor.UNICODE_SMILEYS || EvoEditor.mode != EvoEditor.MODE_HTML) {
+						node = document.createTextNode(match.text);
+					} else {
+						if (!tmpElement)
+							tmpElement = document.createElement("SPAN");
+
+						tmpElement.innerHTML = EvoEditor.createEmoticonHTML(match.text, match.imageUri, match.width, match.height);
+						node = tmpElement.firstChild;
+					}
+
+					replaceMatchWithNode("magicSmiley", match, node, sz == 1);
+				}
+			} finally {
+				if (sz > 1) {
+					EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, "magicSmiley");
+					EvoEditor.maybeUpdateFormattingState(EvoEditor.FORCE_MAYBE);
+					EvoEditor.EmitContentChanged();
+				}
+			}
+		}
 	}
 }
 
@@ -3515,16 +3670,19 @@ EvoEditor.MoveSelectionToPoint = function(xx, yy, cancel_if_not_collapsed)
 	}
 }
 
+EvoEditor.createEmoticonHTML = function(text, imageUri, width, height)
+{
+	if (imageUri && EvoEditor.mode == EvoEditor.MODE_HTML && !EvoEditor.UNICODE_SMILEYS)
+		return "<img src=\"" + imageUri + "\" alt=\"" +
+			text.replace(/\&/g, "&amp;").replace(/\"/g, "&quot;").replace(/\'/g, "&apos;") +
+			"\" width=\"" + width + "px\" height=\"" + height + "px\">";
+
+	return text;
+}
+
 EvoEditor.InsertEmoticon = function(text, imageUri, width, height)
 {
-	if (imageUri) {
-		EvoEditor.InsertHTML("InsertEmoticon",
-			"<img src=\"" + imageUri + "\" alt=\"" +
-				text.replace(/\&/g, "&amp;").replace(/\"/g, "&quot;").replace(/\'/g, "&apos;") +
-			"\" width=\"" + width + "px\" height=\"" + height + "px\">");
-	} else {
-		EvoEditor.InsertHTML("InsertEmoticon", text);
-	}
+	EvoEditor.InsertHTML("InsertEmoticon", EvoEditor.createEmoticonHTML(text, imageUri, width, height));
 }
 
 EvoEditor.GetCurrentSignatureUid = function()

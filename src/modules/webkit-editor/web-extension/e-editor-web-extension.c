@@ -215,6 +215,60 @@ evo_editor_jsc_find_pattern (const gchar *text,
 	return object ? object : jsc_value_new_null (jsc_context);
 }
 
+/* Returns 'null' or an object { text : string, imageUri : string, width : nnn, height : nnn }
+   where only the 'text' is required, describing an emoticon. */
+static JSCValue *
+evo_editor_jsc_lookup_emoticon (const gchar *iconName,
+				gboolean use_unicode_smileys,
+				JSCContext *jsc_context)
+{
+	JSCValue *object = NULL;
+
+	if (iconName && *iconName) {
+		const EEmoticon *emoticon;
+
+		emoticon = e_emoticon_chooser_lookup_emoticon (iconName);
+
+		if (emoticon) {
+			JSCValue *value;
+
+			object = jsc_value_new_object (jsc_context, NULL, NULL);
+
+			if (use_unicode_smileys) {
+				value = jsc_value_new_string (jsc_context, emoticon->unicode_character);
+				jsc_value_object_set_property (object, "text", value);
+				g_clear_object (&value);
+			} else {
+				gchar *image_uri;
+
+				value = jsc_value_new_string (jsc_context, emoticon->text_face);
+				jsc_value_object_set_property (object, "text", value);
+				g_clear_object (&value);
+
+				image_uri = e_emoticon_get_uri ((EEmoticon *) emoticon);
+
+				if (image_uri) {
+					value = jsc_value_new_string (jsc_context, image_uri);
+					jsc_value_object_set_property (object, "imageUri", value);
+					g_clear_object (&value);
+
+					value = jsc_value_new_number (jsc_context, 16);
+					jsc_value_object_set_property (object, "width", value);
+					g_clear_object (&value);
+
+					value = jsc_value_new_number (jsc_context, 16);
+					jsc_value_object_set_property (object, "height", value);
+					g_clear_object (&value);
+
+					g_free (image_uri);
+				}
+			}
+		}
+	}
+
+	return object ? object : jsc_value_new_null (jsc_context);
+}
+
 static void
 evo_editor_jsc_set_spell_check_languages (const gchar *langs,
 					  GWeakRef *wkrf_extension)
@@ -307,6 +361,16 @@ window_object_cleared_cb (WebKitScriptWorld *world,
 		jsc_function = jsc_value_new_function (jsc_context, func_name,
 			G_CALLBACK (evo_editor_jsc_find_pattern), g_object_ref (jsc_context), g_object_unref,
 			JSC_TYPE_VALUE, 2, G_TYPE_STRING, G_TYPE_STRING);
+
+		jsc_value_object_set_property (jsc_editor, func_name, jsc_function);
+
+		g_clear_object (&jsc_function);
+
+		/* EvoEditor.lookupEmoticon(iconName, useUnicodeSmileys) */
+		func_name = "lookupEmoticon";
+		jsc_function = jsc_value_new_function (jsc_context, func_name,
+			G_CALLBACK (evo_editor_jsc_lookup_emoticon), g_object_ref (jsc_context), g_object_unref,
+			JSC_TYPE_VALUE, 2, G_TYPE_STRING, G_TYPE_BOOLEAN);
 
 		jsc_value_object_set_property (jsc_editor, func_name, jsc_function);
 
