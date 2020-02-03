@@ -1246,9 +1246,11 @@ EvoEditor.applyIndent = function(record, isUndo)
 			if (isUndo) {
 				child.style.marginLeft = change.beforeMarginLeft;
 				child.style.marginRight = change.beforeMarginRight;
+				child.style.width = change.beforeWidth;
 			} else {
 				child.style.marginLeft = change.afterMarginLeft;
 				child.style.marginRight = change.afterMarginRight;
+				child.style.width = change.afterWidth;
 			}
 
 			EvoEditor.removeEmptyStyleAttribute(child);
@@ -1285,6 +1287,7 @@ EvoEditor.Indent = function(increment)
 					change.path = EvoSelection.GetChildPath(parent, element);
 					change.beforeMarginLeft = element.style.marginLeft;
 					change.beforeMarginRight = element.style.marginRight;
+					change.beforeWidth = element.style.width;
 				}
 
 				traversar.record.changes[traversar.record.changes.length] = change;
@@ -1426,7 +1429,7 @@ EvoEditor.Indent = function(increment)
 					}
 				}
 			} else {
-				var currValue = null, dir;
+				var currValue = null, dir, width;
 
 				dir = window.getComputedStyle(element).direction;
 
@@ -1446,11 +1449,24 @@ EvoEditor.Indent = function(increment)
 						currValue = 0;
 				}
 
+				width = 0;
+				if (element.style.width.endsWith("ch")) {
+					width = parseInt(element.style.width.slice(0, -2));
+					if (!Number.isInteger(width))
+						width = 0;
+				}
+
 				if (traversar.increment) {
+					if (width && width - EvoEditor.TEXT_INDENT_SIZE > 0)
+						width = width - EvoEditor.TEXT_INDENT_SIZE;
 					currValue = (currValue + EvoEditor.TEXT_INDENT_SIZE) + "ch";
 				} else if (currValue > EvoEditor.TEXT_INDENT_SIZE) {
+					if (width)
+						width = width + EvoEditor.TEXT_INDENT_SIZE;
 					currValue = (currValue - EvoEditor.TEXT_INDENT_SIZE) + "ch";
 				} else {
+					if (width)
+						width = width + currValue;
 					currValue = "";
 				}
 
@@ -1460,9 +1476,13 @@ EvoEditor.Indent = function(increment)
 					element.style.marginLeft = currValue;
 				}
 
+				if (width)
+					element.style.width = width + "ch";
+
 				if (change) {
 					change.afterMarginLeft = element.style.marginLeft;
 					change.afterMarginRight = element.style.marginRight;
+					change.afterWidth = element.style.width;
 				}
 
 				EvoEditor.removeEmptyStyleAttribute(element);
@@ -1639,6 +1659,15 @@ EvoEditor.beforeInputCb = function(inputEvent)
 	inputEvent.preventDefault();
 }
 
+EvoEditor.emptyParagraphAsHtml = function()
+{
+	if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT) {
+		return "<div style=\"width:" + EvoEditor.NORMAL_PARAGRAPH_WIDTH + "ch;\"><br></div>";
+	} else {
+		return "<div><br></div>";
+	}
+}
+
 EvoEditor.initializeContent = function()
 {
 	// for backward compatibility
@@ -1651,7 +1680,7 @@ EvoEditor.initializeContent = function()
 		if (!document.body.firstChild) {
 			EvoUndoRedo.Disable();
 			try {
-				document.body.innerHTML = "<div><br></div>";
+				document.body.innerHTML = EvoEditor.emptyParagraphAsHtml();
 			} finally {
 				EvoUndoRedo.Enable();
 			}
@@ -2362,16 +2391,37 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	var selection = document.getSelection();
 
 	if (isInsertParagraph && selection.isCollapsed && selection.baseNode && selection.baseNode.tagName == "BODY") {
-		document.execCommand("insertHTML", false, "<div><br></div>");
+		document.execCommand("insertHTML", false, EvoEditor.emptyParagraphAsHtml());
 		EvoUndoRedo.GroupTopRecords(2, "insertParagraph::withFormat");
 		return;
 	}
 
 	// make sure there's always a DIV in the body (like after 'select all' followed by 'delete')
 	if (!document.body.childNodes.length || (document.body.childNodes.length == 1 && document.body.childNodes[0].tagName == "BR")) {
-		document.execCommand("insertHTML", false, "<div><br></div>");
+		document.execCommand("insertHTML", false, EvoEditor.emptyParagraphAsHtml());
 		EvoUndoRedo.GroupTopRecords(2, inputEvent.inputType + "::fillEmptyBody");
 		return;
+	}
+
+	if (isInsertParagraph && selection.isCollapsed && selection.baseNode && selection.baseNode.tagName == "DIV") {
+		// for example when moving away from ul/ol, the newly created
+		// paragraph can inherit styles from it, which is also negative text-indent
+		selection.baseNode.removeAttribute("style");
+
+		if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT) {
+			var node = selection.baseNode, citeLevel = 0;
+
+			while (node && node.tagName != "BODY") {
+				if (node.tagName == "BLOCKQUOTE")
+					citeLevel++;
+
+				node = node.parentElement;
+			}
+
+			if (citeLevel * 2 < EvoEditor.NORMAL_PARAGRAPH_WIDTH) {
+				selection.baseNode.style.width = (EvoEditor.NORMAL_PARAGRAPH_WIDTH - citeLevel * 2) + "ch";
+			}
+		}
 	}
 
 	if ((!isInsertParagraph && inputEvent.inputType != "insertText") ||

@@ -1324,28 +1324,6 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"  outline: 1px dotted red;\n"
 		"}\n");
 
-	g_string_append (
-		stylesheet,
-		"body[data-evo-plain-text] "
-		"{\n"
-		"  font-family: Monospace; \n"
-		"}\n");
-
-	g_string_append (
-		stylesheet,
-		"[data-evo-paragraph] "
-		"{\n"
-		"  white-space: pre-wrap; \n"
-		"}\n");
-
-	g_string_append (
-		stylesheet,
-		"body[data-evo-plain-text] [data-evo-paragraph] "
-		"{\n"
-		"  word-wrap: break-word; \n"
-		"  word-break: break-word; \n"
-		"}\n");
-
 	g_string_append_printf (
 		stylesheet,
 		".-x-evo-plaintext-table "
@@ -1362,49 +1340,159 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"  vertical-align: top;\n"
 		"}\n");
 
-	g_string_append_printf (
-		stylesheet,
-		"body[data-evo-plain-text] ul "
-		"{\n"
-		"  list-style: outside none;\n"
-		"  -webkit-padding-start: %dch; \n"
-		"}\n", SPACES_PER_LIST_LEVEL);
+	if (wk_editor->priv->html_mode) {
+		g_string_append (
+			stylesheet,
+			"body ul > li.-x-evo-align-center,ol > li.-x-evo-align-center "
+			"{\n"
+			"  list-style-position: inside;\n"
+			"}\n");
 
-	g_string_append_printf (
-		stylesheet,
-		"body[data-evo-plain-text] ul > li "
-		"{\n"
-		"  list-style-position: outside;\n"
-		"  text-indent: -%dch;\n"
-		"}\n", SPACES_PER_LIST_LEVEL - 1);
+		g_string_append (
+			stylesheet,
+			"body ul > li.-x-evo-align-right, ol > li.-x-evo-align-right "
+			"{\n"
+			"  list-style-position: inside;\n"
+			"}\n");
 
-	g_string_append (
-		stylesheet,
-		"body[data-evo-plain-text] ul > li::before "
-		"{\n"
-		"  content: \"*" UNICODE_NBSP "\";\n"
-		"}\n");
+		g_string_append (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"{\n"
+			"  padding: 0ch 1ch 0ch 1ch;\n"
+			"  margin: 0ch;\n"
+			"  border-width: 0px 2px 0px 2px;\n"
+			"  border-style: none solid none solid;\n"
+			"  border-radius: 2px;\n"
+			"}\n");
 
-	g_string_append_printf (
-		stylesheet,
-		"body[data-evo-plain-text] ul.-x-evo-indented "
-		"{\n"
-		"  -webkit-padding-start: %dch; \n"
-		"}\n", SPACES_PER_LIST_LEVEL);
+		g_string_append_printf (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"{\n"
+			"  border-color: %s;\n"
+			"}\n",
+			e_web_view_get_citation_color_for_level (1));
 
-	g_string_append (
-		stylesheet,
-		"body:not([data-evo-plain-text]) ul > li.-x-evo-align-center,ol > li.-x-evo-align-center "
-		"{\n"
-		"  list-style-position: inside;\n"
-		"}\n");
+		g_string_append_printf (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"{\n"
+			"  border-color: %s;\n"
+			"}\n",
+			e_web_view_get_citation_color_for_level (2));
 
-	g_string_append (
-		stylesheet,
-		"body:not([data-evo-plain-text]) ul > li.-x-evo-align-right, ol > li.-x-evo-align-right "
-		"{\n"
-		"  list-style-position: inside;\n"
-		"}\n");
+		g_string_append_printf (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"{\n"
+			"  border-color: %s;\n"
+			"}\n",
+			e_web_view_get_citation_color_for_level (3));
+
+		g_string_append_printf (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"{\n"
+			"  border-color: %s;\n"
+			"}\n",
+			e_web_view_get_citation_color_for_level (4));
+
+		g_string_append_printf (
+			stylesheet,
+			"body "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"blockquote[type=cite] "
+			"{\n"
+			"  border-color: %s;\n"
+			"}\n",
+			e_web_view_get_citation_color_for_level (5));
+	} else {
+		g_string_append (
+			stylesheet,
+			"body "
+			"{\n"
+			"  font-family: Monospace; \n"
+			"}\n");
+
+		g_string_append_printf (
+			stylesheet,
+			"body ul "
+			"{\n"
+			"  list-style: outside none;\n"
+			"  -webkit-padding-start: %dch; \n"
+			"}\n", SPACES_PER_LIST_LEVEL);
+
+		g_string_append_printf (
+			stylesheet,
+			"body ul > li "
+			"{\n"
+			"  list-style-position: outside;\n"
+			"  text-indent: -%dch;\n"
+			"}\n", SPACES_PER_LIST_LEVEL - 1);
+
+		g_string_append (
+			stylesheet,
+			"body ul > li::before "
+			"{\n"
+			"  content: \"*" UNICODE_NBSP "\";\n"
+			"}\n");
+
+		g_string_append (
+			stylesheet,
+			"body ul ul > li::before, "
+			"body ol ul > li::before "
+			"{\n"
+			"  content: \"-" UNICODE_NBSP "\";\n"
+			"}\n");
+
+		g_string_append (
+			stylesheet,
+			"body ul ul ul > li::before, "
+			"body ol ul ul > li::before, "
+			"body ul ol ul > li::before, "
+			"body ol ol ul > li::before "
+			"{\n"
+			"  content: \"+" UNICODE_NBSP "\";\n"
+			"}\n");
+
+		g_string_append (
+			stylesheet,
+			"body ul ul ul ul > li::before, "
+			"body ol ul ul ul > li::before, "
+			"body ul ol ul ul > li::before, "
+			"body ul ul ol ul > li::before, "
+			"body ol ol ul ul > li::before, "
+			"body ol ul ol ul > li::before, "
+			"body ul ol ol ul > li::before, "
+			"body ol ol ol ul > li::before "
+			"{\n"
+			"  content: \"*" UNICODE_NBSP "\";\n"
+			"}\n");
+
+		g_string_append (
+			stylesheet,
+			"body div "
+			"{\n"
+			"  word-wrap: break-word; \n"
+			"  word-break: break-word; \n"
+			"  white-space: pre-wrap; \n"
+			"}\n");
+	}
 
 	g_string_append_printf (
 		stylesheet,
@@ -1412,13 +1500,6 @@ webkit_editor_update_styles (EContentEditor *editor)
 		"{\n"
 		"  -webkit-padding-start: %dch; \n"
 		"}\n", SPACES_ORDERED_LIST_FIRST_LEVEL);
-
-	g_string_append_printf (
-		stylesheet,
-		"ol.-x-evo-indented "
-		"{\n"
-		"  -webkit-padding-start: %dch; \n"
-		"}\n", SPACES_PER_LIST_LEVEL);
 
 	g_string_append (
 		stylesheet,
@@ -1528,73 +1609,6 @@ webkit_editor_update_styles (EContentEditor *editor)
 		".-x-evo-quote-character"
 		"{\n"
 		"  color: %s;\n"
-		"}\n",
-		e_web_view_get_citation_color_for_level (5));
-
-	g_string_append (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"{\n"
-		"  padding: 0ch 1ch 0ch 1ch;\n"
-		"  margin: 0ch;\n"
-		"  border-width: 0px 2px 0px 2px;\n"
-		"  border-style: none solid none solid;\n"
-		"  border-radius: 2px;\n"
-		"}\n");
-
-	g_string_append_printf (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"{\n"
-		"  border-color: %s;\n"
-		"}\n",
-		e_web_view_get_citation_color_for_level (1));
-
-	g_string_append_printf (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"{\n"
-		"  border-color: %s;\n"
-		"}\n",
-		e_web_view_get_citation_color_for_level (2));
-
-	g_string_append_printf (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"{\n"
-		"  border-color: %s;\n"
-		"}\n",
-		e_web_view_get_citation_color_for_level (3));
-
-	g_string_append_printf (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"{\n"
-		"  border-color: %s;\n"
-		"}\n",
-		e_web_view_get_citation_color_for_level (4));
-
-	g_string_append_printf (
-		stylesheet,
-		"body:not([data-evo-plain-text]) "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"blockquote[type=cite] "
-		"{\n"
-		"  border-color: %s;\n"
 		"}\n",
 		e_web_view_get_citation_color_for_level (5));
 
@@ -1977,6 +1991,9 @@ webkit_editor_set_html_mode (EWebKitEditor *wk_editor,
 		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
 			"EvoEditor.SetMode(EvoEditor.MODE_PLAIN_TEXT);");
 	}
+
+	webkit_editor_update_styles (E_CONTENT_EDITOR (wk_editor));
+	webkit_editor_style_updated_cb (wk_editor);
 }
 
 static void
