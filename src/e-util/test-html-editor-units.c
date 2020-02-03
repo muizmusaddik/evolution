@@ -3549,7 +3549,7 @@ test_link_insert_typed (TestFixture *fixture)
 	if (!test_utils_run_simple_test (fixture,
 		"mode:html\n"
 		"type:www.gnome.org \n",
-		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.org</a> </div>" HTML_SUFFIX,
+		HTML_PREFIX "<div><a href=\"https://www.gnome.org\">www.gnome.org</a> </div>" HTML_SUFFIX,
 		"www.gnome.org \n"))
 		g_test_fail ();
 }
@@ -3567,7 +3567,7 @@ test_link_insert_typed_change_description (TestFixture *fixture)
 		"seq:a\n"
 		"type:GNOME\n"
 		"seq:n\n",
-		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">GNOME</a> </div>" HTML_SUFFIX,
+		HTML_PREFIX "<div><a href=\"https://www.gnome.org\">GNOME</a> </div>" HTML_SUFFIX,
 		"GNOME \n"))
 		g_test_fail ();
 }
@@ -3596,7 +3596,7 @@ test_link_insert_typed_append (TestFixture *fixture)
 		"type:www.gnome.org \n"
 		"seq:l\n"
 		"type:/about\n",
-		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.org/about</a> </div>" HTML_SUFFIX,
+		HTML_PREFIX "<div><a href=\"https://www.gnome.org\">www.gnome.org/about</a> </div>" HTML_SUFFIX,
 		"www.gnome.org/about \n"))
 		g_test_fail ();
 }
@@ -3608,7 +3608,7 @@ test_link_insert_typed_remove (TestFixture *fixture)
 		"mode:html\n"
 		"type:www.gnome.org \n"
 		"seq:bbb\n",
-		HTML_PREFIX "<div><a href=\"http://www.gnome.org\">www.gnome.o</a></div>" HTML_SUFFIX,
+		HTML_PREFIX "<div><a href=\"https://www.gnome.org\">www.gnome.o</a></div>" HTML_SUFFIX,
 		"www.gnome.o\n"))
 		g_test_fail ();
 }
@@ -4180,10 +4180,12 @@ test_paragraph_wrap_lines (TestFixture *fixture)
 		"type:Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero.\n"
 		"action:select-all\n"
 		"action:wrap-lines\n",
-		HTML_PREFIX "<div>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec<br>odio. Praesent libero.</div>"
-		"<div>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec<br>odio. Praesent libero.</div>" HTML_SUFFIX,
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n" "odio. Praesent libero.\n"
-		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n" "odio. Praesent libero."))
+		HTML_PREFIX "<div>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec<br>"
+		"odio. Praesent libero. Lorem ipsum dolor sit amet, consectetur<br>"
+		"adipiscing elit. Integer nec odio. Praesent libero.</div>" HTML_SUFFIX,
+		"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec\n"
+		"odio. Praesent libero. Lorem ipsum dolor sit amet, consectetur\n"
+		"adipiscing elit. Integer nec odio. Praesent libero.\n"))
 		g_test_fail ();
 }
 
@@ -5387,7 +5389,7 @@ test_replace_dialog (TestFixture *fixture)
 		"undo:test:1\n"
 		"undo:redo\n",
 		HTML_PREFIX "<div style=\"width: 71ch;\">text 2 replace</div>" HTML_SUFFIX,
-		"text 2 replace"))
+		"text 2 replace\n"))
 		g_test_fail ();
 }
 
@@ -5408,7 +5410,7 @@ test_replace_dialog_all (TestFixture *fixture)
 		"undo:test:1\n"
 		"undo:redo\n",
 		HTML_PREFIX "<div style=\"width: 71ch;\">t3xt to r3plac3</div>" HTML_SUFFIX,
-		"t3xt to r3plac3"))
+		"t3xt to r3plac3\n"))
 		g_test_fail ();
 }
 

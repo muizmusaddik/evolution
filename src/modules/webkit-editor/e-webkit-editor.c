@@ -2709,6 +2709,9 @@ webkit_find_controller_failed_to_find_text_cb (WebKitFindController *find_contro
 	if (wk_editor->priv->performing_replace_all) {
 		guint replaced_count = wk_editor->priv->replaced_count;
 
+		e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+			"EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_GROUP, %s);", "ReplaceAll");
+
 		webkit_editor_finish_search (wk_editor);
 		e_content_editor_emit_replace_all_done (E_CONTENT_EDITOR (wk_editor), replaced_count);
 	} else {
@@ -2798,6 +2801,9 @@ webkit_editor_replace_all (EContentEditor *editor,
 
 	wk_editor->priv->performing_replace_all = TRUE;
 	wk_editor->priv->replaced_count = 0;
+
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_GROUP, %s);", "ReplaceAll");
 
 	webkit_find_controller_search (wk_editor->priv->find_controller, find_text, wk_options, G_MAXUINT);
 }
