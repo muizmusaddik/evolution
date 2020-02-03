@@ -626,7 +626,7 @@ e_content_editor_default_init (EContentEditorInterface *iface)
 	 * object, if not %NULL, should be freed with g_object_unref(),
 	 * when no longer needed.
 	 *
-	 * Since: 3.36
+	 * Since: 3.38
 	 */
 	signals[REF_MIME_PART] = g_signal_new (
 		"ref-mime-part",
@@ -1752,7 +1752,7 @@ e_content_editor_util_steal_content_data (EContentEditorContentHash *content_has
  *    the referenced data, or %NULL, when cannot be converted (due to
  *    unsupported URI, file not found or such).
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 CamelMimePart *
 e_content_editor_util_create_data_mimepart (const gchar *uri,

@@ -1554,7 +1554,7 @@ e_html_editor_save_content_ready_cb (GObject *source_object,
  *
  * Finish the call with e_html_editor_save_finish() from the @callback.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 void
 e_html_editor_save (EHTMLEditor *editor,
@@ -1610,7 +1610,7 @@ e_html_editor_save (EHTMLEditor *editor,
  *
  * Returns: whether the save succeeded.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 gboolean
 e_html_editor_save_finish (EHTMLEditor *editor,
@@ -1630,7 +1630,7 @@ e_html_editor_save_finish (EHTMLEditor *editor,
  * Add the @mime_part with its Content-ID (if not set, one is assigned),
  * which can be later obtained with e_html_editor_ref_cid_part();
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 void
 e_html_editor_add_cid_part (EHTMLEditor *editor,
@@ -1663,7 +1663,7 @@ e_html_editor_add_cid_part (EHTMLEditor *editor,
  * e_html_editor_add_cid_part(). The function does nothing if no
  * such part is stored.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 void
 e_html_editor_remove_cid_part (EHTMLEditor *editor,
@@ -1682,7 +1682,7 @@ e_html_editor_remove_cid_part (EHTMLEditor *editor,
  * Removes all CID parts previously added with
  * e_html_editor_add_cid_part().
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 void
 e_html_editor_remove_all_cid_parts (EHTMLEditor *editor)
@@ -1707,7 +1707,7 @@ e_html_editor_remove_all_cid_parts (EHTMLEditor *editor)
  * Returns: (transfer full) (nullable): a #CamelMimePart with given Content ID,
  *    or %NULL, if not found.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 CamelMimePart *
 e_html_editor_ref_cid_part (EHTMLEditor *editor,

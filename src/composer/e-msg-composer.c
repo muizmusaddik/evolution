@@ -4234,7 +4234,7 @@ e_msg_composer_get_shell (EMsgComposer *composer)
  * Returns: (transfer none) (nullable): an #EContentEditorContentHash
  *    with current content data, or %NULL, when it is not loaded.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 EContentEditorContentHash *
 e_msg_composer_get_content_hash (EMsgComposer *composer)

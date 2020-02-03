@@ -176,7 +176,7 @@ typedef enum {
  * Influences what content should be returned. Each flag means one
  * version, or part, of the content.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 typedef enum {
 	E_CONTENT_EDITOR_GET_INLINE_IMAGES	= 1 << 0,
@@ -529,7 +529,7 @@ typedef enum {
  *
  * Flags in what state Undo/Redo stack is.
  *
- * Since: 3.36
+ * Since: 3.38
  **/
 typedef enum {
 	E_UNDO_REDO_STATE_NONE		= 0,
