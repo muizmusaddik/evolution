@@ -3045,7 +3045,29 @@ static void
 webkit_editor_insert_image (EContentEditor *editor,
                             const gchar *image_uri)
 {
-	webkit_web_view_execute_editing_command_with_argument (WEBKIT_WEB_VIEW (editor), "InsertImage", image_uri);
+	EWebKitEditor *wk_editor = E_WEBKIT_EDITOR (editor);
+	gint width = -1, height = -1;
+
+	g_return_if_fail (image_uri != NULL);
+
+	if (g_ascii_strncasecmp (image_uri, "file://", 7) == 0) {
+		gchar *filename;
+
+		filename = g_filename_from_uri (image_uri, NULL, NULL);
+
+		if (filename) {
+			if (!gdk_pixbuf_get_file_info (filename, &width, &height)) {
+				width = -1;
+				height = -1;
+			}
+
+			g_free (filename);
+		}
+	}
+
+	e_web_view_jsc_run_script (WEBKIT_WEB_VIEW (wk_editor), wk_editor->priv->cancellable,
+		"EvoEditor.InsertImage(%s, %d, %d);",
+		image_uri, width, height);
 }
 
 static void

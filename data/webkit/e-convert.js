@@ -615,14 +615,7 @@ EvoConvert.ImgToText = function(img)
 
 	txt = img.alt;
 
-	if (!txt) {
-		txt = img.src;
-
-		if (txt.startsWith("cid:"))
-			txt = "";
-	}
-
-	return txt;
+	return txt ? txt : "";
 }
 
 EvoConvert.extractElemText = function(elem, normalDivWidth, quoteLevel)

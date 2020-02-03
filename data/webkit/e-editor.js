@@ -3688,6 +3688,19 @@ EvoEditor.InsertEmoticon = function(text, imageUri, width, height)
 	EvoEditor.InsertHTML("InsertEmoticon", EvoEditor.createEmoticonHTML(text, imageUri, width, height));
 }
 
+EvoEditor.InsertImage = function(imageUri, width, height)
+{
+	var html = "<img src=\"" + imageUri + "\"";
+
+	if (width > 0 && height > 0) {
+		html += " width=\"" + width + "px\" height=\"" + height + "px\"";
+	}
+
+	html += ">";
+
+	EvoEditor.InsertHTML("InsertImage", html);
+}
+
 EvoEditor.GetCurrentSignatureUid = function()
 {
 	var elem = document.querySelector(".-x-evo-signature[id]");

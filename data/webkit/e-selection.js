@@ -131,9 +131,17 @@ EvoSelection.Store = function(doc)
 	selection.baseElem = sel.baseNode ? EvoSelection.GetChildPath(doc.body, sel.baseNode) : [];
 	selection.baseOffset = sel.baseOffset + EvoSelection.GetOverallTextOffset(sel.baseNode);
 
+	if (sel.baseNode && sel.baseNode.nodeType == sel.baseNode.ELEMENT_NODE) {
+		selection.baseIsElement = true;
+	}
+
 	if (!sel.isCollapsed) {
 		selection.extentElem = EvoSelection.GetChildPath(doc.body, sel.extentNode);
 		selection.extentOffset = sel.extentOffset + EvoSelection.GetOverallTextOffset(sel.extentNode);
+
+		if (sel.extentNode && sel.extentNode.nodeType == sel.extentNode.ELEMENT_NODE) {
+			selection.extentIsElement = true;
+		}
 	}
 
 	return selection;
@@ -160,15 +168,19 @@ EvoSelection.Restore = function(doc, selection)
 		base_offset = 0;
 	}
 
-	base_node = EvoSelection.GetTextOffsetNode(base_node, base_offset);
-	base_offset -= EvoSelection.GetOverallTextOffset(base_node);
+	if (!selection.baseIsElement) {
+		base_node = EvoSelection.GetTextOffsetNode(base_node, base_offset);
+		base_offset -= EvoSelection.GetOverallTextOffset(base_node);
+	}
 
 	extent_node = EvoSelection.FindElementByPath(doc.body, selection.extentElem);
 	extent_offset = selection.extentOffset;
 
 	if (extent_node) {
-		extent_node = EvoSelection.GetTextOffsetNode(extent_node, extent_offset);
-		extent_offset -= EvoSelection.GetOverallTextOffset(extent_node);
+		if (!selection.extentIsElement) {
+			extent_node = EvoSelection.GetTextOffsetNode(extent_node, extent_offset);
+			extent_offset -= EvoSelection.GetOverallTextOffset(extent_node);
+		}
 	}
 
 	if (extent_node)
@@ -213,9 +225,17 @@ EvoSelection.ToString = function(selection)
 	str += "baseElem=" + utils.arrayToString(base_elem);
 	str += " baseOffset=" + (base_offset ? base_offset : 0);
 
+	if (selection.baseIsElement) {
+		str += " baseIsElement=1";
+	}
+
 	if (extent_elem) {
 		str += " extentElem=" + utils.arrayToString(extent_elem);
 		str += " extentOffset=" + (extent_offset ? extent_offset : 0);
+
+		if (selection.extentIsElement) {
+			str += " extentIsElement=1";
+		}
 	}
 
 	return str;
@@ -286,6 +306,17 @@ EvoSelection.FromString = function(str)
 			continue;
 		}
 
+		name = "baseIsElement";
+		if (split_str[ii].startsWith(name + "=")) {
+			var value;
+
+			value = parseInt(split_str[ii].slice(name.length + 1), 10);
+			if (Number.isInteger(value) && value == 1) {
+				selection[name] = true;
+			}
+			continue;
+		}
+
 		name = "extentElem";
 		if (split_str[ii].startsWith(name + "=")) {
 			selection[name] = utils.arrayFromString(split_str[ii].slice(name.length + 1));
@@ -300,6 +331,17 @@ EvoSelection.FromString = function(str)
 			if (Number.isInteger(value)) {
 				selection[name] = value;
 			}
+		}
+
+		name = "extentIsElement";
+		if (split_str[ii].startsWith(name + "=")) {
+			var value;
+
+			value = parseInt(split_str[ii].slice(name.length + 1), 10);
+			if (Number.isInteger(value) && value == 1) {
+				selection[name] = true;
+			}
+			continue;
 		}
 	}
 

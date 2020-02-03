@@ -3649,7 +3649,6 @@ test_image_insert (TestFixture *fixture)
 	EContentEditor *cnt_editor;
 	gchar *expected_html;
 	gchar *filename;
-	gchar *image_data_base64;
 	gchar *uri;
 	GError *error = NULL;
 
@@ -3670,17 +3669,10 @@ test_image_insert (TestFixture *fixture)
 	/* Wait some time until the operation is finished */
 	test_utils_wait_milliseconds (500);
 
-	image_data_base64 = test_utils_get_base64_data_for_image (filename);
+	expected_html = g_strconcat (HTML_PREFIX "<div>before*<img src=\"", uri, "\" width=\"24px\" height=\"24px\">+after</div>" HTML_SUFFIX, NULL);
 
 	g_free (uri);
 	g_free (filename);
-
-	g_return_if_fail (image_data_base64 != NULL);
-
-	expected_html = g_strconcat (HTML_PREFIX "<div>before*<img src=\"data:image/png;base64,",
-		image_data_base64, "\">+after</div>" HTML_SUFFIX, NULL);
-
-	g_free (image_data_base64);
 
 	if (!test_utils_run_simple_test (fixture,
 		"undo:save\n" /* 1 */
@@ -3689,7 +3681,7 @@ test_image_insert (TestFixture *fixture)
 		"undo:test:1\n"
 		"type:+after\n",
 		expected_html,
-		"before*+after"))
+		"before*+after\n"))
 		g_test_fail ();
 
 	g_free (expected_html);
