@@ -59,7 +59,7 @@ enum {
 	PROP_FONT_COLOR,
 	PROP_FONT_NAME,
 	PROP_FONT_SIZE,
-	PROP_INDENTED,
+	PROP_INDENT_LEVEL,
 	PROP_ITALIC,
 	PROP_STRIKETHROUGH,
 	PROP_SUBSCRIPT,
@@ -88,7 +88,7 @@ struct _EWebKitEditorPrivate {
 
 	guint32 style_flags;
 	guint32 temporary_style_flags; /* that's for collapsed selection, format changes only after something is typed */
-	gboolean is_indented;
+	gint indent_level;
 
 	GdkRGBA *background_color;
 	GdkRGBA *font_color;
@@ -943,19 +943,19 @@ formatting_changed_cb (WebKitUserContentManager *manager,
 		g_object_notify (object, "block-format");
 
 	changed = FALSE;
-	jsc_value = jsc_value_object_get_property (jsc_params, "indented");
-	if (jsc_value && jsc_value_is_boolean (jsc_value)) {
-		gboolean value = jsc_value_to_boolean (jsc_value);
+	jsc_value = jsc_value_object_get_property (jsc_params, "indentLevel");
+	if (jsc_value && jsc_value_is_number (jsc_value)) {
+		gint value = jsc_value_to_int32 (jsc_value);
 
-		if ((value ? 1: 0) != (wk_editor->priv->is_indented ? 1 : 0)) {
-			wk_editor->priv->is_indented = value;
+		if (value != wk_editor->priv->indent_level) {
+			wk_editor->priv->indent_level = value;
 			changed = TRUE;
 		}
 	}
 	g_clear_object (&jsc_value);
 
 	if (changed || forced)
-		g_object_notify (object, "indented");
+		g_object_notify (object, "indent-level");
 
 	#define update_style_flag(_flag, _set) \
 		changed = (wk_editor->priv->style_flags & (_flag)) != ((_set) ? (_flag) : 0); \
@@ -2350,11 +2350,11 @@ webkit_editor_selection_wrap (EContentEditor *editor)
 }
 
 static gboolean
-webkit_editor_selection_is_indented (EWebKitEditor *wk_editor)
+webkit_editor_get_indent_level (EWebKitEditor *wk_editor)
 {
 	g_return_val_if_fail (E_IS_WEBKIT_EDITOR (wk_editor), FALSE);
 
-	return wk_editor->priv->is_indented;
+	return wk_editor->priv->indent_level;
 }
 
 static void
@@ -4538,10 +4538,10 @@ webkit_editor_get_property (GObject *object,
 					E_WEBKIT_EDITOR (object)));
 			return;
 
-		case PROP_INDENTED:
-			g_value_set_boolean (
+		case PROP_INDENT_LEVEL:
+			g_value_set_int (
 				value,
-				webkit_editor_selection_is_indented (
+				webkit_editor_get_indent_level (
 					E_WEBKIT_EDITOR (object)));
 			return;
 
@@ -5273,7 +5273,7 @@ e_webkit_editor_class_init (EWebKitEditorClass *class)
 	g_object_class_override_property (
 		object_class, PROP_FONT_SIZE, "font-size");
 	g_object_class_override_property (
-		object_class, PROP_INDENTED, "indented");
+		object_class, PROP_INDENT_LEVEL, "indent-level");
 	g_object_class_override_property (
 		object_class, PROP_ITALIC, "italic");
 	g_object_class_override_property (

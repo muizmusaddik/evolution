@@ -299,18 +299,18 @@ e_content_editor_default_init (EContentEditorInterface *iface)
 			G_PARAM_STATIC_STRINGS));
 
 	/**
-	 * EContentEditor:indented
+	 * EContentEditor:indent-level
 	 *
-	 * Holds whether current paragraph is indented. This does not include
+	 * Holds current paragraph indent level. This does not include
 	 * citations.
 	 */
 	g_object_interface_install_property (
 		iface,
-		g_param_spec_boolean (
-			"indented",
+		g_param_spec_int (
+			"indent-level",
 			NULL,
 			NULL,
-			FALSE,
+			0, E_HTML_EDITOR_MAX_INDENT_LEVEL, 0,
 			G_PARAM_READABLE |
 			G_PARAM_STATIC_STRINGS));
 
@@ -724,24 +724,24 @@ e_content_editor_can_redo (EContentEditor *editor)
 }
 
 /**
- * e_content_editor_is_indented:
+ * e_content_editor_indent_level:
  * @editor: an #EContentEditor
  *
- * Returns whether the current paragraph is indented. This does not include
- * citations.
+ * Returns the indent level for the current selection/caret position.
+ * This does not include citations.
  *
- * Returns: %TRUE when current paragraph is indented, %FALSE otherwise.
+ * Returns: the indent level.
  *
- * Since: 3.22
+ * Since: 3.38
  **/
-gboolean
-e_content_editor_is_indented (EContentEditor *editor)
+gint
+e_content_editor_indent_level (EContentEditor *editor)
 {
-	gboolean value = FALSE;
+	gint value = 0;
 
-	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), FALSE);
+	g_return_val_if_fail (E_IS_CONTENT_EDITOR (editor), 0);
 
-	g_object_get (G_OBJECT (editor), "indented", &value, NULL);
+	g_object_get (G_OBJECT (editor), "indent-level", &value, NULL);
 
 	return value;
 }

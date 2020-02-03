@@ -113,7 +113,7 @@ var EvoEditor = {
 		bgColor : null,
 		fontSize : null,
 		fontFamily : null,
-		indented : false,
+		indentLevel : 0,
 		bodyFgColor : null,
 		bodyBgColor : null,
 		bodyLinkColor : null,
@@ -277,13 +277,11 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		script : 0,
 		blockFormat : null,
 		fontSize : null,
-		indented : null,
+		indentLevel : 0,
 		bgColor : null
 	};
 
-	for (parent = baseElem; parent && !(parent == document.body) && (
-	     obj.script == 0 || obj.blockFormat == null || obj.fontSize == null || obj.indented == null || obj.bgColor == null);
-	     parent = parent.parentElement) {
+	for (parent = baseElem; parent && !(parent === document.body); parent = parent.parentElement) {
 		if (obj.script == 0) {
 			if (parent.tagName == "SUB")
 				obj.script = -1;
@@ -332,32 +330,30 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 			}
 		}
 
-		if (obj.indented == null) {
-			var dir = window.getComputedStyle(parent).direction;
+		var dir = window.getComputedStyle(parent).direction;
 
-			if (dir == "rtl") {
-				tmp = parent.style.marginRight;
-				if (tmp && tmp.endsWith("ch")) {
-					tmp = parseInt(tmp.slice(0, -2));
-				} else {
-					tmp = "";
-				}
-			} else { // "ltr" or other
-				tmp = parent.style.marginLeft;
-				if (tmp && tmp.endsWith("ch")) {
-					tmp = parseInt(tmp.slice(0, -2));
-				} else {
-					tmp = "";
-				}
+		if (dir == "rtl") {
+			tmp = parent.style.marginRight;
+			if (tmp && tmp.endsWith("ch")) {
+				tmp = parseInt(tmp.slice(0, -2));
+			} else {
+				tmp = "";
 			}
-
-			if (Number.isInteger(tmp)) {
-				obj.indented = tmp > 0;
+		} else { // "ltr" or other
+			tmp = parent.style.marginLeft;
+			if (tmp && tmp.endsWith("ch")) {
+				tmp = parseInt(tmp.slice(0, -2));
+			} else {
+				tmp = "";
 			}
-
-			if (parent.tagName == "UL" || parent.tagName == "OL")
-				obj.indented = true;
 		}
+
+		if (Number.isInteger(tmp) && tmp > 0) {
+			obj.indentLevel += tmp / EvoEditor.TEXT_INDENT_SIZE;
+		}
+
+		if (parent.tagName == "UL" || parent.tagName == "OL")
+			obj.indentLevel++;
 
 		if (obj.bgColor == null && parent.style.backgroundColor != "") {
 			obj.bgColor = parent.style.backgroundColor;
@@ -385,10 +381,10 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		nchanges++;
 	}
 
-	value = obj.indented == null ? false : obj.indented;
-	if (force || value != EvoEditor.formattingState.indented) {
-		EvoEditor.formattingState.indented = value;
-		changes["indented"] = value;
+	value = obj.indentLevel;
+	if (force || value != EvoEditor.formattingState.indentLevel) {
+		EvoEditor.formattingState.indentLevel = value;
+		changes["indentLevel"] = value;
 		nchanges++;
 	}
 

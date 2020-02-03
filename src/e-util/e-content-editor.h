@@ -433,7 +433,7 @@ gboolean	e_content_editor_can_copy	(EContentEditor *editor);
 gboolean	e_content_editor_can_paste	(EContentEditor *editor);
 gboolean	e_content_editor_can_undo	(EContentEditor *editor);
 gboolean	e_content_editor_can_redo	(EContentEditor *editor);
-gboolean	e_content_editor_is_indented	(EContentEditor *editor);
+gint		e_content_editor_indent_level	(EContentEditor *editor);
 gboolean	e_content_editor_get_spell_check_enabled
 						(EContentEditor *editor);
 void		e_content_editor_set_spell_check_enabled

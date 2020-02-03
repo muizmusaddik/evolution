@@ -2214,6 +2214,28 @@ e_html_editor_content_editor_font_name_to_combo_box (GBinding *binding,
 	return TRUE;
 }
 
+static gboolean
+e_html_editor_indent_level_to_bool_indent_cb (GBinding *binding,
+					      const GValue *from_value,
+					      GValue *to_value,
+					      gpointer user_data)
+{
+	g_value_set_boolean (to_value, g_value_get_int (from_value) < E_HTML_EDITOR_MAX_INDENT_LEVEL);
+
+	return TRUE;
+}
+
+static gboolean
+e_html_editor_indent_level_to_bool_unindent_cb (GBinding *binding,
+						const GValue *from_value,
+						GValue *to_value,
+						gpointer user_data)
+{
+	g_value_set_boolean (to_value, g_value_get_int (from_value) > 0);
+
+	return TRUE;
+}
+
 void
 editor_actions_bind (EHTMLEditor *editor)
 {
@@ -2278,10 +2300,18 @@ editor_actions_bind (EHTMLEditor *editor)
 		cnt_editor, "block-format",
 		ACTION (STYLE_NORMAL), "current-value",
 		G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-	e_binding_bind_property (
-		cnt_editor, "indented",
+	e_binding_bind_property_full (
+		cnt_editor, "indent-level",
+		ACTION (INDENT), "sensitive",
+		G_BINDING_SYNC_CREATE,
+		e_html_editor_indent_level_to_bool_indent_cb,
+		NULL, NULL, NULL);
+	e_binding_bind_property_full (
+		cnt_editor, "indent-level",
 		ACTION (UNINDENT), "sensitive",
-		G_BINDING_SYNC_CREATE);
+		G_BINDING_SYNC_CREATE,
+		e_html_editor_indent_level_to_bool_unindent_cb,
+		NULL, NULL, NULL);
 	e_binding_bind_property (
 		cnt_editor, "italic",
 		ACTION (ITALIC), "active",

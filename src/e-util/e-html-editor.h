@@ -49,6 +49,8 @@
 	(G_TYPE_INSTANCE_GET_CLASS \
 	((obj), E_TYPE_HTML_EDITOR, EHTMLEditorClass))
 
+#define E_HTML_EDITOR_MAX_INDENT_LEVEL 10
+
 G_BEGIN_DECLS
 
 typedef struct _EHTMLEditor EHTMLEditor;
