@@ -2406,7 +2406,7 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 			return;
 	}
 
-	if (baseNode.nodeValue == "")
+	if (!baseNode.nodeValue)
 		return;
 
 	var canLinks;
@@ -2440,7 +2440,10 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 			baseNode = baseNode.nextSibling;
 
 			baseNode.parentElement.insertBefore(newNode, baseNode);
-			baseNode.parentElement.removeChild(baseNode);
+			if (newNode.tagName == "A")
+				newNode.appendChild(baseNode);
+			else
+				baseNode.parentElement.removeChild(baseNode);
 
 			if (updateSelection && newBaseNode && offset - match.end >= 0)
 				selection.setPosition(newBaseNode, offset - match.end);
