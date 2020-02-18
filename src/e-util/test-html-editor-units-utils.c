@@ -1292,35 +1292,27 @@ test_utils_get_content_editor (TestFixture *fixture)
 }
 
 gchar *
-test_utils_get_base64_data_for_image (const gchar *path)
+test_utils_dup_image_uri (const gchar *path)
 {
-	gchar *image_data = NULL;
-	gchar *image_data_base64;
-	gsize image_data_length = 0;
-	gboolean success;
+	gchar *image_uri = NULL;
 	GError *error = NULL;
 
 	if (path && strchr (path, G_DIR_SEPARATOR)) {
-		success = g_file_get_contents (path, &image_data, &image_data_length, &error);
+		image_uri = g_filename_to_uri (path, NULL, &error);
 	} else {
 		gchar *filename;
 
 		filename = e_icon_factory_get_icon_filename (path, GTK_ICON_SIZE_MENU);
 		if (filename) {
-			success = g_file_get_contents (filename, &image_data, &image_data_length, &error);
+			image_uri = g_filename_to_uri (filename, NULL, &error);
 			g_free (filename);
 		} else {
 			g_set_error (&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, "Icon '%s' not found", path);
-			success = FALSE;
 		}
 	}
 
 	g_assert_no_error (error);
-	g_assert (success);
+	g_assert_nonnull (image_uri);
 
-	image_data_base64 = g_base64_encode ((const guchar *) image_data, image_data_length);
-
-	g_free (image_data);
-
-	return image_data_base64;
+	return image_uri;
 }

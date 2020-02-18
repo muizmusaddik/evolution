@@ -3690,24 +3690,23 @@ test_image_insert (TestFixture *fixture)
 static void
 test_emoticon_insert_typed (TestFixture *fixture)
 {
-	gchar *image_data_base64;
+	gchar *image_uri;
 	gchar *expected_html;
 
 	test_utils_fixture_change_setting_boolean (fixture, "org.gnome.evolution.mail", "composer-magic-smileys", TRUE);
 	test_utils_fixture_change_setting_boolean (fixture, "org.gnome.evolution.mail", "composer-unicode-smileys", FALSE);
 
-	image_data_base64 = test_utils_get_base64_data_for_image ("face-smile");
+	image_uri = test_utils_dup_image_uri ("face-smile");
 
-	expected_html = g_strconcat (HTML_PREFIX "<div>before <img src=\"data:image/png;base64,",
-		image_data_base64, "\" alt=\":-)\">after</div>" HTML_SUFFIX, NULL);
+	expected_html = g_strconcat (HTML_PREFIX "<div>before <img src=\"", image_uri, "\" alt=\":-)\" width=\"16px\" height=\"16px\">after</div>" HTML_SUFFIX, NULL);
 
-	g_free (image_data_base64);
+	g_free (image_uri);
 
 	if (!test_utils_run_simple_test (fixture,
 		"mode:html\n"
 		"type:before :)after\n",
 		expected_html,
-		"before :-)after"))
+		"before :-)after\n"))
 		g_test_fail ();
 
 	g_free (expected_html);
@@ -3716,24 +3715,23 @@ test_emoticon_insert_typed (TestFixture *fixture)
 static void
 test_emoticon_insert_typed_dash (TestFixture *fixture)
 {
-	gchar *image_data_base64;
+	gchar *image_uri;
 	gchar *expected_html;
 
 	test_utils_fixture_change_setting_boolean (fixture, "org.gnome.evolution.mail", "composer-magic-smileys", TRUE);
 	test_utils_fixture_change_setting_boolean (fixture, "org.gnome.evolution.mail", "composer-unicode-smileys", FALSE);
 
-	image_data_base64 = test_utils_get_base64_data_for_image ("face-smile");
+	image_uri = test_utils_dup_image_uri ("face-smile");
 
-	expected_html = g_strconcat (HTML_PREFIX "<div>before <img src=\"data:image/png;base64,",
-		image_data_base64, "\" alt=\":-)\">after</div>" HTML_SUFFIX, NULL);
+	expected_html = g_strconcat (HTML_PREFIX "<div>before <img src=\"", image_uri, "\" alt=\":-)\" width=\"16px\" height=\"16px\">after</div>" HTML_SUFFIX, NULL);
 
-	g_free (image_data_base64);
+	g_free (image_uri);
 
 	if (!test_utils_run_simple_test (fixture,
 		"mode:html\n"
 		"type:before :-)after\n",
 		expected_html,
-		"before :-)after"))
+		"before :-)after\n"))
 		g_test_fail ();
 
 	g_free (expected_html);

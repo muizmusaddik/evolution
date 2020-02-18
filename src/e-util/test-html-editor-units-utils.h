@@ -105,8 +105,7 @@ void		test_utils_set_clipboard_text	(const gchar *text,
 gchar *		test_utils_get_clipboard_text	(gboolean request_html);
 EContentEditor *
 		test_utils_get_content_editor	(TestFixture *fixture);
-gchar *		test_utils_get_base64_data_for_image
-						(const gchar *path);
+gchar *		test_utils_dup_image_uri	(const gchar *path);
 
 G_END_DECLS
 
