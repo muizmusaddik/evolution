@@ -128,19 +128,19 @@ EvoSelection.Store = function(doc)
 
 	var selection = {}, sel = doc.getSelection();
 
-	selection.baseElem = sel.baseNode ? EvoSelection.GetChildPath(doc.body, sel.baseNode) : [];
-	selection.baseOffset = sel.baseOffset + EvoSelection.GetOverallTextOffset(sel.baseNode);
+	selection.anchorElem = sel.anchorNode ? EvoSelection.GetChildPath(doc.body, sel.anchorNode) : [];
+	selection.anchorOffset = sel.anchorOffset + EvoSelection.GetOverallTextOffset(sel.anchorNode);
 
-	if (sel.baseNode && sel.baseNode.nodeType == sel.baseNode.ELEMENT_NODE) {
-		selection.baseIsElement = true;
+	if (sel.anchorNode && sel.anchorNode.nodeType == sel.anchorNode.ELEMENT_NODE) {
+		selection.anchorIsElement = true;
 	}
 
 	if (!sel.isCollapsed) {
-		selection.extentElem = EvoSelection.GetChildPath(doc.body, sel.extentNode);
-		selection.extentOffset = sel.extentOffset + EvoSelection.GetOverallTextOffset(sel.extentNode);
+		selection.focusElem = EvoSelection.GetChildPath(doc.body, sel.focusNode);
+		selection.focusOffset = sel.focusOffset + EvoSelection.GetOverallTextOffset(sel.focusNode);
 
-		if (sel.extentNode && sel.extentNode.nodeType == sel.extentNode.ELEMENT_NODE) {
-			selection.extentIsElement = true;
+		if (sel.focusNode && sel.focusNode.nodeType == sel.focusNode.ELEMENT_NODE) {
+			selection.focusIsElement = true;
 		}
 	}
 
@@ -155,38 +155,38 @@ EvoSelection.Restore = function(doc, selection)
 		return;
 	}
 
-	var base_node, base_offset, extent_node, extent_offset;
+	var anchorNode, anchorOffset, focusNode, focusOffset;
 
-	base_node = EvoSelection.FindElementByPath(doc.body, selection.baseElem);
-	base_offset = selection.baseOffset;
+	anchorNode = EvoSelection.FindElementByPath(doc.body, selection.anchorElem);
+	anchorOffset = selection.anchorOffset;
 
-	if (!base_node) {
+	if (!anchorNode) {
 		return;
 	}
 
-	if (!base_offset) {
-		base_offset = 0;
+	if (!anchorOffset) {
+		anchorOffset = 0;
 	}
 
-	if (!selection.baseIsElement) {
-		base_node = EvoSelection.GetTextOffsetNode(base_node, base_offset);
-		base_offset -= EvoSelection.GetOverallTextOffset(base_node);
+	if (!selection.anchorIsElement) {
+		anchorNode = EvoSelection.GetTextOffsetNode(anchorNode, anchorOffset);
+		anchorOffset -= EvoSelection.GetOverallTextOffset(anchorNode);
 	}
 
-	extent_node = EvoSelection.FindElementByPath(doc.body, selection.extentElem);
-	extent_offset = selection.extentOffset;
+	focusNode = EvoSelection.FindElementByPath(doc.body, selection.focusElem);
+	focusOffset = selection.focusOffset;
 
-	if (extent_node) {
-		if (!selection.extentIsElement) {
-			extent_node = EvoSelection.GetTextOffsetNode(extent_node, extent_offset);
-			extent_offset -= EvoSelection.GetOverallTextOffset(extent_node);
+	if (focusNode) {
+		if (!selection.focusIsElement) {
+			focusNode = EvoSelection.GetTextOffsetNode(focusNode, focusOffset);
+			focusOffset -= EvoSelection.GetOverallTextOffset(focusNode);
 		}
 	}
 
-	if (extent_node)
-		doc.getSelection().setBaseAndExtent(base_node, base_offset, extent_node, extent_offset);
+	if (focusNode)
+		doc.getSelection().setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
 	else
-		doc.getSelection().setPosition(base_node, base_offset);
+		doc.getSelection().setPosition(anchorNode, anchorOffset);
 }
 
 /* Encodes selection information to a string */
@@ -215,26 +215,26 @@ EvoSelection.ToString = function(selection)
 		}
 	};
 
-	var str = "", base_elem, base_offset, extent_elem, extent_offset;
+	var str = "", anchorElem, anchorOffset, focusElem, focusOffset;
 
-	base_elem = selection.baseElem;
-	base_offset = selection.baseOffset;
-	extent_elem = selection.extentElem;
-	extent_offset = selection.extentOffset;
+	anchorElem = selection.anchorElem;
+	anchorOffset = selection.anchorOffset;
+	focusElem = selection.focusElem;
+	focusOffset = selection.focusOffset;
 
-	str += "baseElem=" + utils.arrayToString(base_elem);
-	str += " baseOffset=" + (base_offset ? base_offset : 0);
+	str += "anchorElem=" + utils.arrayToString(anchorElem);
+	str += " anchorOffset=" + (anchorOffset ? anchorOffset : 0);
 
-	if (selection.baseIsElement) {
-		str += " baseIsElement=1";
+	if (selection.anchorIsElement) {
+		str += " anchorIsElement=1";
 	}
 
-	if (extent_elem) {
-		str += " extentElem=" + utils.arrayToString(extent_elem);
-		str += " extentOffset=" + (extent_offset ? extent_offset : 0);
+	if (focusElem) {
+		str += " focusElem=" + utils.arrayToString(focusElem);
+		str += " focusOffset=" + (focusOffset ? focusOffset : 0);
 
-		if (selection.extentIsElement) {
-			str += " extentIsElement=1";
+		if (selection.focusIsElement) {
+			str += " focusIsElement=1";
 		}
 	}
 
@@ -289,13 +289,13 @@ EvoSelection.FromString = function(str)
 	for (ii = 0; ii < split_str.length; ii++) {
 		var name;
 
-		name = "baseElem";
+		name = "anchorElem";
 		if (split_str[ii].startsWith(name + "=")) {
 			selection[name] = utils.arrayFromString(split_str[ii].slice(name.length + 1));
 			continue;
 		}
 
-		name = "baseOffset";
+		name = "anchorOffset";
 		if (split_str[ii].startsWith(name + "=")) {
 			var value;
 
@@ -306,7 +306,7 @@ EvoSelection.FromString = function(str)
 			continue;
 		}
 
-		name = "baseIsElement";
+		name = "anchorIsElement";
 		if (split_str[ii].startsWith(name + "=")) {
 			var value;
 
@@ -317,13 +317,13 @@ EvoSelection.FromString = function(str)
 			continue;
 		}
 
-		name = "extentElem";
+		name = "focusElem";
 		if (split_str[ii].startsWith(name + "=")) {
 			selection[name] = utils.arrayFromString(split_str[ii].slice(name.length + 1));
 			continue;
 		}
 
-		name = "extentOffset";
+		name = "focusOffset";
 		if (split_str[ii].startsWith(name + "=")) {
 			var value;
 
@@ -333,7 +333,7 @@ EvoSelection.FromString = function(str)
 			}
 		}
 
-		name = "extentIsElement";
+		name = "focusIsElement";
 		if (split_str[ii].startsWith(name + "=")) {
 			var value;
 
@@ -345,8 +345,8 @@ EvoSelection.FromString = function(str)
 		}
 	}
 
-	/* The "baseElem" is required, the rest is optional */
-	if (!selection.baseElem)
+	/* The "anchorElem" is required, the rest is optional */
+	if (!selection.anchorElem)
 		return null;
 
 	return selection;
@@ -364,55 +364,55 @@ EvoSelection.CreateUpdaterObject = function()
 {
 	var obj = {
 		selectionBefore : null,
-		selectionBaseNode : null,
-		selectionBaseOffset : -1,
-		selectionExtentNode : null,
-		selectionExtentOffset : -1,
-		changeBase : false,
-		changeExtent : false,
+		selectionAnchorNode : null,
+		selectionAnchorOffset : -1,
+		selectionFocusNode : null,
+		selectionFocusOffset : -1,
+		changeAnchor : false,
+		changeFocus : false,
 
 		beforeRemove : function(node) {
-			this.changeBase = false;
-			this.changeExtent = false;
+			this.changeAnchor = false;
+			this.changeFocus = false;
 
-			if (this.selectionBaseNode) {
-				this.changeBase = node === this.selectionBaseNode ||
-					(this.selectionBaseNode.noteType == this.selectionBaseNode.TEXT_NODE &&
-					 this.selectionBaseNode.parentElement === node);
+			if (this.selectionAnchorNode) {
+				this.changeAnchor = node === this.selectionAnchorNode ||
+					(this.selectionAnchorNode.noteType == this.selectionAnchorNode.TEXT_NODE &&
+					 this.selectionAnchorNode.parentElement === node);
 			}
 
-			if (this.selectionExtentNode) {
-				this.changeExtent = node === this.selectionExtentNode ||
-					(this.selectionExtentNode.noteType == this.selectionExtentNode.TEXT_NODE &&
-					 this.selectionExtentNode.parentElement === node);
+			if (this.selectionFocusNode) {
+				this.changeFocus = node === this.selectionFocusNode ||
+					(this.selectionFocusNode.noteType == this.selectionFocusNode.TEXT_NODE &&
+					 this.selectionFocusNode.parentElement === node);
 			}
 		},
 
 		afterRemove : function(newNode) {
-			if (this.changeBase) {
-				this.selectionBaseNode = newNode;
-				this.selectionBaseOffset += EvoSelection.GetOverallTextOffset(newNode);
+			if (this.changeAnchor) {
+				this.selectionAnchorNode = newNode;
+				this.selectionAnchorOffset += EvoSelection.GetOverallTextOffset(newNode);
 			}
 
-			if (this.changeExtent) {
-				this.selectionExtentNode = newNode;
-				this.selectionExtentOffset += EvoSelection.GetOverallTextOffset(newNode);
+			if (this.changeFocus) {
+				this.selectionFocusNode = newNode;
+				this.selectionFocusOffset += EvoSelection.GetOverallTextOffset(newNode);
 			}
 
-			this.changeBase = false;
-			this.changeExtent = false;
+			this.changeAnchor = false;
+			this.changeFocus = false;
 		},
 
 		restore : function() {
-			if (this.selectionBaseNode && this.selectionBaseNode.parentElement) {
+			if (this.selectionAnchorNode && this.selectionAnchorNode.parentElement) {
 				var selection = {
-					baseElem : EvoSelection.GetChildPath(document.body, this.selectionBaseNode),
-					baseOffset : this.selectionBaseOffset
+					anchorElem : EvoSelection.GetChildPath(document.body, this.selectionAnchorNode),
+					anchorOffset : this.selectionAnchorOffset
 				};
 
-				if (this.selectionExtentNode) {
-					selection.extentElem = EvoSelection.GetChildPath(document.body, this.selectionExtentNode);
-					selection.extentOffset = this.selectionExtentOffset;
+				if (this.selectionFocusNode) {
+					selection.focusElem = EvoSelection.GetChildPath(document.body, this.selectionFocusNode);
+					selection.focusOffset = this.selectionFocusOffset;
 				}
 
 				EvoSelection.Restore(document, selection);
@@ -423,12 +423,12 @@ EvoSelection.CreateUpdaterObject = function()
 	};
 
 	obj.selectionBefore = EvoSelection.Store(document);
-	obj.selectionBaseNode = document.getSelection().baseNode;
-	obj.selectionBaseOffset = document.getSelection().baseOffset + EvoSelection.GetOverallTextOffset(obj.selectionBaseNode);
+	obj.selectionAnchorNode = document.getSelection().anchorNode;
+	obj.selectionAnchorOffset = document.getSelection().anchorOffset + EvoSelection.GetOverallTextOffset(obj.selectionAnchorNode);
 
 	if (!document.getSelection().isCollapsed) {
-		obj.selectionExtentNode = document.getSelection().extentNode;
-		obj.selectionExtentOffset = document.getSelection().extentOffset + EvoSelection.GetOverallTextOffset(obj.selectionExtentNode);
+		obj.selectionFocusNode = document.getSelection().focusNode;
+		obj.selectionFocusOffset = document.getSelection().focusOffset + EvoSelection.GetOverallTextOffset(obj.selectionFocusNode);
 	}
 
 	return obj;

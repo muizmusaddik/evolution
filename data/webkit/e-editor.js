@@ -101,7 +101,7 @@ var EvoEditor = {
 	forceFormatStateUpdate : false,
 	formattingState : {
 		mode : -1,
-		baseElement : null, // to avoid often notifications when just moving within the same node
+		anchorElement : null, // to avoid often notifications when just moving within the same node
 		bold : false,
 		italic : false,
 		underline : false,
@@ -124,39 +124,39 @@ var EvoEditor = {
 
 EvoEditor.maybeUpdateFormattingState = function(force)
 {
-	var baseElem = null;
+	var anchorElem = null;
 
 	if (!document.getSelection().isCollapsed) {
 		var commonParent;
 
-		commonParent = EvoEditor.GetCommonParent(document.getSelection().baseNode, document.getSelection().extentNode, true);
+		commonParent = EvoEditor.GetCommonParent(document.getSelection().anchorNode, document.getSelection().focusNode, true);
 		if (commonParent) {
 			var child1, child2;
 
-			child1 = EvoEditor.GetDirectChild(commonParent, document.getSelection().baseNode);
-			child2 = EvoEditor.GetDirectChild(commonParent, document.getSelection().extentNode);
+			child1 = EvoEditor.GetDirectChild(commonParent, document.getSelection().anchorNode);
+			child2 = EvoEditor.GetDirectChild(commonParent, document.getSelection().focusNode);
 
 			if (child1 && (!child2 || (child2 && EvoEditor.GetChildIndex(commonParent, child1) <= EvoEditor.GetChildIndex(commonParent, child2)))) {
-				baseElem = document.getSelection().extentNode;
+				anchorElem = document.getSelection().focusNode;
 			}
 		}
 	}
 
-	if (!baseElem)
-		baseElem = document.getSelection().baseNode;
-	if (!baseElem)
-		baseElem = document.body ? document.body.firstElementChild : null;
+	if (!anchorElem)
+		anchorElem = document.getSelection().anchorNode;
+	if (!anchorElem)
+		anchorElem = document.body ? document.body.firstElementChild : null;
 
-	if (baseElem && baseElem.nodeType == baseElem.TEXT_NODE)
-		baseElem = baseElem.parentElement;
+	if (anchorElem && anchorElem.nodeType == anchorElem.TEXT_NODE)
+		anchorElem = anchorElem.parentElement;
 
-	if (force == EvoEditor.FORCE_NO && EvoEditor.formattingState.baseElement === baseElem && EvoEditor.mode == EvoEditor.formattingState.mode) {
+	if (force == EvoEditor.FORCE_NO && EvoEditor.formattingState.anchorElement === anchorElem && EvoEditor.mode == EvoEditor.formattingState.mode) {
 		return;
 	}
 
 	force = force == EvoEditor.FORCE_YES;
 
-	EvoEditor.formattingState.baseElement = baseElem;
+	EvoEditor.formattingState.anchorElement = anchorElem;
 
 	var changes = {}, nchanges = 0, value, tmp, computedStyle;
 
@@ -167,7 +167,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		nchanges++;
 	}
 
-	computedStyle = baseElem ? window.getComputedStyle(baseElem) : null;
+	computedStyle = anchorElem ? window.getComputedStyle(anchorElem) : null;
 
 	value = (computedStyle ? computedStyle.fontWeight : "") == "bold";
 	if (value != EvoEditor.formattingState.bold) {
@@ -187,7 +187,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 
 	tmp = computedStyle ? computedStyle.webkitTextDecorationsInEffect : "";
 
-	value = tmp.search("underline") >= 0 && (!baseElem || baseElem.tagName != "A");
+	value = tmp.search("underline") >= 0 && (!anchorElem || anchorElem.tagName != "A");
 	if (force || value != EvoEditor.formattingState.underline) {
 		EvoEditor.formattingState.underline = value;
 		changes["underline"] = value;
@@ -281,7 +281,7 @@ EvoEditor.maybeUpdateFormattingState = function(force)
 		bgColor : null
 	};
 
-	for (parent = baseElem; parent && !(parent === document.body); parent = parent.parentElement) {
+	for (parent = anchorElem; parent && !(parent === document.body); parent = parent.parentElement) {
 		if (obj.script == 0) {
 			if (parent.tagName == "SUB")
 				obj.script = -1;
@@ -579,8 +579,8 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 	var currentElemsArray = null;
 
 	if (!startNode) {
-		startNode = document.getSelection().baseNode;
-		endNode = document.getSelection().extentNode;
+		startNode = document.getSelection().anchorNode;
+		endNode = document.getSelection().focusNode;
 
 		if (!startNode) {
 			startNode = document.body;
@@ -588,7 +588,7 @@ EvoEditor.ClaimAffectedContent = function(startNode, endNode, flags)
 	}
 
 	if (!endNode) {
-		endNode = document.getSelection().extentNode;
+		endNode = document.getSelection().focusNode;
 
 		if (!endNode)
 			endNode = startNode;
@@ -1627,16 +1627,16 @@ EvoEditor.beforeInputCb = function(inputEvent)
 	// when writing at the end of the anchor, then write into the anchor, not out (WebKit writes out)
 	if (!selection ||
 	    !selection.isCollapsed ||
-	    !selection.baseNode ||
-	    selection.baseNode.nodeType != selection.baseNode.TEXT_NODE ||
-	    selection.baseOffset != selection.baseNode.nodeValue.length ||
-	    !selection.baseNode.parentElement ||
-	    selection.baseNode.parentElement.tagName != "A")
+	    !selection.anchorNode ||
+	    selection.anchorNode.nodeType != selection.anchorNode.TEXT_NODE ||
+	    selection.anchorOffset != selection.anchorNode.nodeValue.length ||
+	    !selection.anchorNode.parentElement ||
+	    selection.anchorNode.parentElement.tagName != "A")
 		return;
 
-	var node = selection.baseNode;
+	var node = selection.anchorNode;
 
-	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "insertText", selection.baseNode, selection.baseNode,
+	EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_EVENT, "insertText", selection.anchorNode, selection.anchorNode,
 		EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML | EvoEditor.CLAIM_CONTENT_FLAG_USE_PARENT_BLOCK_NODE);
 
 	try {
@@ -1683,7 +1683,7 @@ EvoEditor.initializeContent = function()
 		}
 
 		// make sure there is a selection
-		if (!document.getSelection().baseNode) {
+		if (!document.getSelection().anchorNode) {
 			document.getSelection().setPosition(document.body.firstChild ? document.body.firstChild : document.body, 0);
 		}
 	}
@@ -2386,7 +2386,7 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	var isInsertParagraph = inputEvent.inputType == "insertParagraph";
 	var selection = document.getSelection();
 
-	if (isInsertParagraph && selection.isCollapsed && selection.baseNode && selection.baseNode.tagName == "BODY") {
+	if (isInsertParagraph && selection.isCollapsed && selection.anchorNode && selection.anchorNode.tagName == "BODY") {
 		document.execCommand("insertHTML", false, EvoEditor.emptyParagraphAsHtml());
 		EvoUndoRedo.GroupTopRecords(2, "insertParagraph::withFormat");
 		return;
@@ -2399,13 +2399,13 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		return;
 	}
 
-	if (isInsertParagraph && selection.isCollapsed && selection.baseNode && selection.baseNode.tagName == "DIV") {
+	if (isInsertParagraph && selection.isCollapsed && selection.anchorNode && selection.anchorNode.tagName == "DIV") {
 		// for example when moving away from ul/ol, the newly created
 		// paragraph can inherit styles from it, which is also negative text-indent
-		selection.baseNode.removeAttribute("style");
+		selection.anchorNode.removeAttribute("style");
 
 		if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT) {
-			var node = selection.baseNode, citeLevel = 0;
+			var node = selection.anchorNode, citeLevel = 0;
 
 			while (node && node.tagName != "BODY") {
 				if (node.tagName == "BLOCKQUOTE")
@@ -2415,7 +2415,7 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 			}
 
 			if (citeLevel * 2 < EvoEditor.NORMAL_PARAGRAPH_WIDTH) {
-				selection.baseNode.style.width = (EvoEditor.NORMAL_PARAGRAPH_WIDTH - citeLevel * 2) + "ch";
+				selection.anchorNode.style.width = (EvoEditor.NORMAL_PARAGRAPH_WIDTH - citeLevel * 2) + "ch";
 			}
 		}
 	}
@@ -2426,18 +2426,18 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		return;
 	}
 
-	if (!selection.isCollapsed || !selection.baseNode)
+	if (!selection.isCollapsed || !selection.anchorNode)
 		return;
 
-	var baseNode = selection.baseNode, parentElem;
+	var anchorNode = selection.anchorNode, parentElem;
 
-	if (baseNode.nodeType != baseNode.ELEMENT_NODE) {
-		parentElem = baseNode.parentElement;
+	if (anchorNode.nodeType != anchorNode.ELEMENT_NODE) {
+		parentElem = anchorNode.parentElement;
 
 		if (!parentElem)
 			return;
 	} else {
-		parentElem = baseNode;
+		parentElem = anchorNode;
 	}
 
 	if (isInsertParagraph) {
@@ -2446,13 +2446,13 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		if (!parentElem)
 			return;
 
-		baseNode = parentElem.lastChild;
+		anchorNode = parentElem.lastChild;
 
-		if (!baseNode || baseNode.nodeType != baseNode.TEXT_NODE)
+		if (!anchorNode || anchorNode.nodeType != anchorNode.TEXT_NODE)
 			return;
 	}
 
-	if (!baseNode.nodeValue)
+	if (!anchorNode.nodeValue)
 		return;
 
 	var canLinks;
@@ -2462,7 +2462,7 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	if (canLinks) {
 		var tmpNode;
 
-		for (tmpNode = baseNode; tmpNode && tmpNode.tagName != "BODY"; tmpNode = tmpNode.parentElement) {
+		for (tmpNode = anchorNode; tmpNode && tmpNode.tagName != "BODY"; tmpNode = tmpNode.parentElement) {
 			if (tmpNode.tagName == "A") {
 				canLinks = false;
 				break;
@@ -2470,29 +2470,29 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 		}
 	}
 
-	var text = baseNode.nodeValue, covered = false;
+	var text = anchorNode.nodeValue, covered = false;
 
 	var replaceMatchWithNode = function(opType, match, newNode, canEmit) {
-		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, baseNode.parentElement, baseNode.parentElement,
+		EvoUndoRedo.StartRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType, anchorNode.parentElement, anchorNode.parentElement,
 			EvoEditor.CLAIM_CONTENT_FLAG_SAVE_HTML);
 
 		try {
-			var offset = selection.baseOffset, updateSelection = selection.baseNode === baseNode, newBaseNode;
+			var offset = selection.anchorOffset, updateSelection = selection.anchorNode === anchorNode, newAnchorNode;
 
-			baseNode.splitText(match.end);
-			newBaseNode = baseNode.nextSibling;
-			baseNode.splitText(match.start);
+			anchorNode.splitText(match.end);
+			newAnchorNode = anchorNode.nextSibling;
+			anchorNode.splitText(match.start);
 
-			baseNode = baseNode.nextSibling;
+			anchorNode = anchorNode.nextSibling;
 
-			baseNode.parentElement.insertBefore(newNode, baseNode);
+			anchorNode.parentElement.insertBefore(newNode, anchorNode);
 			if (newNode.tagName == "A")
-				newNode.appendChild(baseNode);
+				newNode.appendChild(anchorNode);
 			else
-				baseNode.parentElement.removeChild(baseNode);
+				anchorNode.parentElement.removeChild(anchorNode);
 
-			if (updateSelection && newBaseNode && offset - match.end >= 0)
-				selection.setPosition(newBaseNode, offset - match.end);
+			if (updateSelection && newAnchorNode && offset - match.end >= 0)
+				selection.setPosition(newAnchorNode, offset - match.end);
 		} finally {
 			EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, opType);
 
@@ -2620,10 +2620,10 @@ EvoEditor.getParentElement = function(tagName, fromNode, canClimbUp)
 	var node = fromNode;
 
 	if (!node)
-		node = document.getSelection().extentNode;
+		node = document.getSelection().focusNode;
 
 	if (!node)
-		node = document.getSelection().baseNode;
+		node = document.getSelection().anchorNode;
 
 	while (node && node.nodeType != node.ELEMENT_NODE) {
 		node = node.parentElement;
@@ -3946,7 +3946,7 @@ EvoEditor.InsertSignature = function(content, isHTML, uid, fromMessage, checkCha
 				document.getSelection().setPosition(document.body.firstChild, 0);
 			}
 
-			node = document.getSelection().baseNode;
+			node = document.getSelection().anchorNode;
 
 			if (node) {
 				if (node.nodeType != node.ELEMENT_NODE)
@@ -4013,7 +4013,7 @@ EvoEditor.InsertContent = function(text, isHTML, quote)
 		}
 
 		if (quote) {
-			var baseNode = document.getSelection().baseNode, intoBody = false;
+			var anchorNode = document.getSelection().anchorNode, intoBody = false;
 
 			if (!content.firstElementChild || (content.firstElementChild.tagName != "DIV" && content.firstElementChild.tagName != "P" &&
 			    content.firstElementChild.tagName != "PRE")) {
@@ -4027,13 +4027,13 @@ EvoEditor.InsertContent = function(text, isHTML, quote)
 				content.appendChild(node);
 			}
 
-			if (baseNode) {
+			if (anchorNode) {
 				var node, parentBlock = null;
 
-				if (baseNode.nodeType == baseNode.ELEMENT_NODE) {
-					node = baseNode;
+				if (anchorNode.nodeType == anchorNode.ELEMENT_NODE) {
+					node = anchorNode;
 				} else {
-					node = baseNode.parentElement;
+					node = anchorNode.parentElement;
 				}
 
 				while (node && node.tagName != "BODY" && !EvoEditor.IsBlockNode(node)) {
@@ -4057,13 +4057,13 @@ EvoEditor.InsertContent = function(text, isHTML, quote)
 					try {
 						if (willSplit) {
 							// need to split the content up to the parent block node
-							if (baseNode.nodeType == baseNode.TEXT_NODE) {
-								baseNode.splitText(document.getSelection().baseOffset);
+							if (anchorNode.nodeType == anchorNode.TEXT_NODE) {
+								anchorNode.splitText(document.getSelection().anchorOffset);
 							}
 
-							var from = baseNode.nextSibling, parent, nextFrom = null;
+							var from = anchorNode.nextSibling, parent, nextFrom = null;
 
-							parent = from ? from.parentElement : baseNode.parentElement;
+							parent = from ? from.parentElement : anchorNode.parentElement;
 
 							if (!from && parent) {
 								from = parent.nextElementSibling;
@@ -4107,10 +4107,10 @@ EvoEditor.InsertContent = function(text, isHTML, quote)
 						else
 							document.getSelection().setPosition(content, 0);
 
-						if (baseNode.nodeType == baseNode.ELEMENT_NODE && baseNode.parentElement &&
-						    (baseNode.tagName == "DIV" || baseNode.tagName == "P" || baseNode.tagName == "PRE") &&
-						    (!baseNode.children.length || (baseNode.children.length == 1 && baseNode.children[0].tagName == "BR"))) {
-							baseNode.parentElement.removeChild(baseNode);
+						if (anchorNode.nodeType == anchorNode.ELEMENT_NODE && anchorNode.parentElement &&
+						    (anchorNode.tagName == "DIV" || anchorNode.tagName == "P" || anchorNode.tagName == "PRE") &&
+						    (!anchorNode.children.length || (anchorNode.children.length == 1 && anchorNode.children[0].tagName == "BR"))) {
+							anchorNode.parentElement.removeChild(anchorNode);
 						}
 					} finally {
 						EvoUndoRedo.StopRecord(EvoUndoRedo.RECORD_KIND_CUSTOM, "InsertContent::text");
@@ -4353,8 +4353,8 @@ EvoEditor.WrapSelection = function()
 {
 	var nodeFrom, nodeTo;
 
-	nodeFrom = EvoEditor.GetParentBlockNode(document.getSelection().baseNode);
-	nodeTo = EvoEditor.GetParentBlockNode(document.getSelection().extentNode);
+	nodeFrom = EvoEditor.GetParentBlockNode(document.getSelection().anchorNode);
+	nodeTo = EvoEditor.GetParentBlockNode(document.getSelection().focusNode);
 
 	if (!nodeFrom || !nodeTo) {
 		return;
@@ -4460,9 +4460,9 @@ EvoEditor.onContextMenu = function(event)
 	var node = event.target;
 
 	if (!node)
-		node = document.getSelection().extentNode;
+		node = document.getSelection().focusNode;
 	if (!node)
-		node = document.getSelection().baseNode;
+		node = document.getSelection().anchorNode;
 
 	EvoEditor.contextMenuNode = node;
 
