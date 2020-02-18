@@ -2402,7 +2402,8 @@ EvoEditor.AfterInputEvent = function(inputEvent, isWordDelim)
 	if (isInsertParagraph && selection.isCollapsed && selection.anchorNode && selection.anchorNode.tagName == "DIV") {
 		// for example when moving away from ul/ol, the newly created
 		// paragraph can inherit styles from it, which is also negative text-indent
-		selection.anchorNode.removeAttribute("style");
+		selection.anchorNode.textIndent = "";
+		EvoEditor.removeEmptyStyleAttribute(selection.anchorNode);
 
 		if (EvoEditor.mode == EvoEditor.MODE_PLAIN_TEXT) {
 			var node = selection.anchorNode, citeLevel = 0;
